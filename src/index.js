@@ -1,4 +1,4 @@
-// 24/7 Cloudflare Worker ICT Discord Alert Bot with Test Alert Button & FVG Points in Embed Title
+// 24/7 Cloudflare Worker ICT Discord Alert Bot with Webhook URL GUI Input
 // Runs every 1 minute for free on Cloudflare Workers
 
 const SYMBOLS = [
@@ -35,9 +35,10 @@ export default {
 
     // Send Test Alert API
     if (url.pathname === "/api/test-alert" && request.method === "POST") {
-      const webhookUrl = env.DISCORD_WEBHOOK_URL;
+      const config = await getConfig(env);
+      const webhookUrl = config.discordWebhookUrl || env.DISCORD_WEBHOOK_URL;
       if (!webhookUrl) {
-        return new Response(JSON.stringify({ error: "No DISCORD_WEBHOOK_URL configured in Cloudflare environment!" }), { status: 400 });
+        return new Response(JSON.stringify({ error: "No Discord Webhook URL provided! Please enter it in the Control Panel." }), { status: 400 });
       }
       try {
         await sendDiscordEmbed(webhookUrl, "🧪 Test Alert - ICT Scanner Working!", SYMBOLS[2], "15m", 2415.50, 500);
@@ -74,11 +75,17 @@ async function getConfig(env) {
     custom = globalThis.USER_SETTINGS;
   }
 
-  if (custom) return custom;
-
   const parseTf = (envVal, defaultArray) => envVal ? envVal.split(",").map(s => s.trim()) : defaultArray;
 
+  const fallbackWebhook = env.DISCORD_WEBHOOK_URL || "";
+
+  if (custom) {
+    if (!custom.discordWebhookUrl) custom.discordWebhookUrl = fallbackWebhook;
+    return custom;
+  }
+
   return {
+    discordWebhookUrl: fallbackWebhook,
     MSS: { enabled: env.ENABLE_MSS !== "false", timeframes: parseTf(env.MSS_TIMEFRAMES, ["1h", "4h"]) },
     FVG: {
       enabled: env.ENABLE_FVG !== "false",
@@ -93,10 +100,9 @@ async function getConfig(env) {
 }
 
 async function scanAll(env) {
-  const webhookUrl = env.DISCORD_WEBHOOK_URL;
-  if (!webhookUrl) return;
-
   const CONFIG = await getConfig(env);
+  const webhookUrl = CONFIG.discordWebhookUrl || env.DISCORD_WEBHOOK_URL;
+  if (!webhookUrl) return;
 
   for (const sym of SYMBOLS) {
     const timeframes = new Set();
@@ -366,6 +372,7 @@ function renderAdminHTML(settings) {
     .card { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
     .header { display: flex; justify-content: space-between; align-items: center; }
     .title { font-weight: bold; font-size: 18px; color: #f1f5f9; }
+    .sub-title { font-size: 12px; color: #94a3b8; margin-top: 4px; }
     .section-label { font-size: 13px; font-weight: bold; color: #fbbf24; margin-top: 12px; margin-bottom: 4px; }
     .tf-group { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
     .btn { background: #334155; border: 1px solid #475569; color: #94a3b8; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; }
@@ -378,6 +385,7 @@ function renderAdminHTML(settings) {
     .save-btn:hover { background: #059669; }
     .test-btn { width: 100%; background: #8b5cf6; color: white; border: none; padding: 12px; border-radius: 10px; font-size: 15px; font-weight: bold; cursor: pointer; margin-top: 10px; }
     .test-btn:hover { background: #7c3aed; }
+    .webhook-input { width: 100%; box-sizing: border-box; margin-top: 8px; padding: 10px; background: #0f172a; border: 1px solid #475569; color: white; border-radius: 8px; font-size: 13px; }
     .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
     .switch input { opacity: 0; width: 0; height: 0; }
     .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #475569; transition: .3s; border-radius: 24px; }
@@ -390,7 +398,13 @@ function renderAdminHTML(settings) {
 <body>
   <h1>🎛️ ICT Alert Control Panel</h1>
   <div id="status"></div>
-  
+
+  <div class="card">
+    <div class="title">🔗 Discord Webhook URL</div>
+    <div class="sub-title">Paste your Discord channel webhook URL below:</div>
+    <input type="text" id="discordWebhookUrl" class="webhook-input" value="${settings.discordWebhookUrl || ''}" placeholder="https://discord.com/api/webhooks/...">
+  </div>
+
   <button type="button" class="test-btn" onclick="sendTestAlert()">🧪 Send Test Alert to Discord</button>
 
   <form id="configForm" style="margin-top: 15px;">
@@ -465,13 +479,15 @@ function renderAdminHTML(settings) {
       } else {
         const err = await res.json();
         status.style.color = '#ef4444';
-        status.innerText = '❌ Failed: ' + (err.error || 'Check Discord Webhook URL in Cloudflare Variables');
+        status.innerText = '❌ Failed: ' + (err.error || 'Check Discord Webhook URL');
       }
       setTimeout(() => status.innerText = '', 4000);
     }
 
     document.getElementById('configForm').onsubmit = async (e) => {
       e.preventDefault();
+      settings.discordWebhookUrl = document.getElementById('discordWebhookUrl').value.trim();
+
       ['FVG', 'FVGFill', 'MSS', 'OB', 'Liquidity'].forEach(pat => {
         if (!settings[pat]) settings[pat] = { enabled: true, timeframes: [] };
         settings[pat].enabled = document.getElementById(pat + '_enabled').checked;
@@ -497,7 +513,7 @@ function renderAdminHTML(settings) {
       const status = document.getElementById('status');
       if (res.ok) {
         status.style.color = '#10b981';
-        status.innerText = '✅ Settings Saved Instantly!';
+        status.innerText = '✅ Settings & Webhook Saved Instantly!';
       } else {
         status.style.color = '#ef4444';
         status.innerText = '❌ Error saving settings!';
