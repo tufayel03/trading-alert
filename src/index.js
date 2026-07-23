@@ -1,4 +1,4 @@
-// 24/7 Cloudflare Worker ICT Discord Alert Bot with Guaranteed Short PNG Image URLs
+// 24/7 Cloudflare Worker ICT Discord Alert Bot with Real-Time Chart Screenshots
 // Runs every 1 minute for free on Cloudflare Workers
 
 const SYMBOLS = [
@@ -33,7 +33,7 @@ export default {
       }
     }
 
-    // Send Test Alert API
+    // Send Test Alert API using REAL LIVE Market Data & REAL Chart
     if (url.pathname === "/api/test-alert" && request.method === "POST") {
       const config = await getConfig(env);
       const webhookUrl = config.discordWebhookUrl || env.DISCORD_WEBHOOK_URL;
@@ -41,13 +41,12 @@ export default {
         return new Response(JSON.stringify({ error: "No Discord Webhook URL provided! Please enter it in the Control Panel." }), { status: 400 });
       }
       try {
-        const sampleCandles = [
-          { timestamp: 1700000000, open: 2400.0, high: 2410.0, low: 2395.0, close: 2405.0 },
-          { timestamp: 1700000900, open: 2405.0, high: 2420.0, low: 2402.0, close: 2418.0 },
-          { timestamp: 1700001800, open: 2418.0, high: 2425.0, low: 2412.0, close: 2415.5 }
-        ];
-        const chartImgUrl = await generateChartImageUrl("XAUUSD (Gold)", "15m", sampleCandles);
-        await sendDiscordEmbed(webhookUrl, "🧪 Test Alert - ICT Scanner Working!", SYMBOLS[2], "15m", 2415.50, 500, chartImgUrl);
+        const goldSym = SYMBOLS[2]; // XAUUSD Gold
+        const realCandles = await fetchCandles(goldSym.ticker, "15m");
+        const currentPrice = realCandles && realCandles.length > 0 ? realCandles[realCandles.length - 1].close : 2415.50;
+        const chartImgUrl = await generateChartImageUrl("XAUUSD (Gold)", "15m", realCandles);
+
+        await sendDiscordEmbed(webhookUrl, "🧪 Test Alert - Real Live Gold Market Chart", goldSym, "15m", currentPrice, 350, chartImgUrl);
         return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
       } catch (e) {
         return new Response(JSON.stringify({ error: e.message }), { status: 500 });
@@ -183,7 +182,7 @@ async function scanAll(env) {
           if (activeBullFvg && closedBar.timestamp > activeBullFvg.timestamp) {
             if (closedBar.low <= activeBullFvg.top) {
               const fillKey = `${sym.ticker}_${tf}_BULL_FVG_FILLED_${activeBullFvg.timestamp}`;
-              if (!(await isAlreadyAlerted(env, key))) {
+              if (!(await isAlreadyAlerted(env, fillKey))) {
                 await markAsAlerted(env, fillKey);
                 await sendDiscordEmbed(webhookUrl, "🎯 Bullish FVG Filled / Tapped", sym, tf, currentPrice, activeBullFvg.gapPoints, chartImgUrl);
                 activeFvgs.delete(bullFvgKey);
@@ -339,7 +338,7 @@ async function generateChartImageUrl(symbolName, timeframe, candles) {
     },
     options: {
       legend: { display: false },
-      title: { display: true, text: `📊 ${symbolName} - ${timeframe} Close Prices (Dhaka Time)`, fontColor: '#38bdf8', fontSize: 14 },
+      title: { display: true, text: `📊 ${symbolName} - ${timeframe} Live Candle Closes (Dhaka Time)`, fontColor: '#38bdf8', fontSize: 14 },
       scales: {
         xAxes: [{ ticks: { fontColor: '#94a3b8', fontSize: 10 }, gridLines: { color: '#334155' } }],
         yAxes: [{ ticks: { fontColor: '#94a3b8', fontSize: 10 }, gridLines: { color: '#334155' } }]
@@ -465,7 +464,7 @@ function renderAdminHTML(settings) {
     <input type="text" id="discordWebhookUrl" class="webhook-input" value="${settings.discordWebhookUrl || ''}" placeholder="https://discord.com/api/webhooks/...">
   </div>
 
-  <button type="button" class="test-btn" onclick="sendTestAlert()">🧪 Send Test Alert to Discord</button>
+  <button type="button" class="test-btn" onclick="sendTestAlert()">🧪 Send Real Live Chart Test Alert to Discord</button>
 
   <form id="configForm" style="margin-top: 15px;">
     ${patterns.map(pat => {
@@ -531,11 +530,11 @@ function renderAdminHTML(settings) {
     async function sendTestAlert() {
       const status = document.getElementById('status');
       status.style.color = '#38bdf8';
-      status.innerText = '⏳ Sending test alert to Discord...';
+      status.innerText = '⏳ Fetching live market candles & rendering real chart...';
       const res = await fetch('/api/test-alert', { method: 'POST' });
       if (res.ok) {
         status.style.color = '#10b981';
-        status.innerText = '✅ Test Alert Sent Successfully to Discord!';
+        status.innerText = '✅ Real Live Chart Test Alert Sent to Discord!';
       } else {
         const err = await res.json();
         status.style.color = '#ef4444';
