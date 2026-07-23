@@ -1,4 +1,4 @@
-name = "ict-discord-worker"
+name = "trading-alert"
 main = "src/index.js"
 compatibility_date = "2024-01-01"
 
