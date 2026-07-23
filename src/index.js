@@ -1,4 +1,4 @@
-// 24/7 Cloudflare Worker ICT Discord Alert Bot with Real-Time Chart Screenshots
+// 24/7 Cloudflare Worker ICT Discord Alert Bot with REAL TradingView Chart Screenshots
 // Runs every 1 minute for free on Cloudflare Workers
 
 const SYMBOLS = [
@@ -33,7 +33,7 @@ export default {
       }
     }
 
-    // Send Test Alert API using REAL LIVE Market Data & REAL Chart
+    // Send Test Alert API using REAL TradingView Screenshot & Live Market Price
     if (url.pathname === "/api/test-alert" && request.method === "POST") {
       const config = await getConfig(env);
       const webhookUrl = config.discordWebhookUrl || env.DISCORD_WEBHOOK_URL;
@@ -44,9 +44,9 @@ export default {
         const goldSym = SYMBOLS[2]; // XAUUSD Gold
         const realCandles = await fetchCandles(goldSym.ticker, "15m");
         const currentPrice = realCandles && realCandles.length > 0 ? realCandles[realCandles.length - 1].close : 2415.50;
-        const chartImgUrl = await generateChartImageUrl("XAUUSD (Gold)", "15m", realCandles);
+        const chartImgUrl = generateTradingViewChartUrl(goldSym.tvSymbol, "15m");
 
-        await sendDiscordEmbed(webhookUrl, "🧪 Test Alert - Real Live Gold Market Chart", goldSym, "15m", currentPrice, 350, chartImgUrl);
+        await sendDiscordEmbed(webhookUrl, "🧪 Test Alert - Real TradingView Chart Screenshot", goldSym, "15m", currentPrice, 350, chartImgUrl);
         return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
       } catch (e) {
         return new Response(JSON.stringify({ error: e.message }), { status: 500 });
@@ -130,7 +130,7 @@ async function scanAll(env) {
         
         const timestamp = closedBar.timestamp;
         const currentPrice = closedBar.close;
-        const chartImgUrl = await generateChartImageUrl(sym.name, tf, candles);
+        const chartImgUrl = generateTradingViewChartUrl(sym.tvSymbol, tf);
 
         // 1. FVG Creation & Tracking with Min Points Filter
         if (CONFIG.FVG?.enabled && CONFIG.FVG.timeframes.includes(tf)) {
@@ -313,56 +313,11 @@ async function fetchCandles(ticker, timeframe) {
   return candles;
 }
 
-async function generateChartImageUrl(symbolName, timeframe, candles) {
-  if (!candles || candles.length === 0) return null;
-
-  const slice = candles.slice(-14);
-  const labels = slice.map(c => {
-    const d = new Date(c.timestamp * 1000);
-    return d.toLocaleTimeString("en-US", { timeZone: "Asia/Dhaka", hour: "2-digit", minute: "2-digit", hour12: false });
-  });
-
-  const closes = slice.map(c => Number(c.close.toFixed(4)));
-  const bgColors = slice.map(c => c.close >= c.open ? '#10b981' : '#ef4444');
-
-  const chartConfig = {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: `${symbolName} (${timeframe})`,
-        data: closes,
-        backgroundColor: bgColors,
-        borderWidth: 1
-      }]
-    },
-    options: {
-      legend: { display: false },
-      title: { display: true, text: `📊 ${symbolName} - ${timeframe} Live Candle Closes (Dhaka Time)`, fontColor: '#38bdf8', fontSize: 14 },
-      scales: {
-        xAxes: [{ ticks: { fontColor: '#94a3b8', fontSize: 10 }, gridLines: { color: '#334155' } }],
-        yAxes: [{ ticks: { fontColor: '#94a3b8', fontSize: 10 }, gridLines: { color: '#334155' } }]
-      }
-    }
-  };
-
-  try {
-    const res = await fetch("https://quickchart.io/chart/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chart: chartConfig, backgroundColor: "#0f172a", width: 600, height: 300 })
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success && data.url) {
-        return data.url;
-      }
-    }
-  } catch (err) {
-    console.error("Error generating short chart URL:", err);
-  }
-
-  return null;
+function generateTradingViewChartUrl(tvSymbol, timeframe) {
+  const tfMap = { "5m": "5", "15m": "15", "1h": "60", "4h": "240", "1d": "D" };
+  const interval = tfMap[timeframe] || "15";
+  const widgetUrl = `https://s.tradingview.com/widgetembed/?symbol=${encodeURIComponent(tvSymbol)}&interval=${interval}&theme=dark`;
+  return `https://api.microlink.io/?url=${encodeURIComponent(widgetUrl)}&screenshot=true&embed=screenshot.url`;
 }
 
 async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price, gapPoints = null, chartImgUrl = null) {
@@ -464,7 +419,7 @@ function renderAdminHTML(settings) {
     <input type="text" id="discordWebhookUrl" class="webhook-input" value="${settings.discordWebhookUrl || ''}" placeholder="https://discord.com/api/webhooks/...">
   </div>
 
-  <button type="button" class="test-btn" onclick="sendTestAlert()">🧪 Send Real Live Chart Test Alert to Discord</button>
+  <button type="button" class="test-btn" onclick="sendTestAlert()">🧪 Send Real TradingView Screenshot Test Alert</button>
 
   <form id="configForm" style="margin-top: 15px;">
     ${patterns.map(pat => {
@@ -530,11 +485,11 @@ function renderAdminHTML(settings) {
     async function sendTestAlert() {
       const status = document.getElementById('status');
       status.style.color = '#38bdf8';
-      status.innerText = '⏳ Fetching live market candles & rendering real chart...';
+      status.innerText = '⏳ Capturing real TradingView chart screenshot...';
       const res = await fetch('/api/test-alert', { method: 'POST' });
       if (res.ok) {
         status.style.color = '#10b981';
-        status.innerText = '✅ Real Live Chart Test Alert Sent to Discord!';
+        status.innerText = '✅ Real TradingView Chart Screenshot Alert Sent!';
       } else {
         const err = await res.json();
         status.style.color = '#ef4444';
