@@ -1,4 +1,4 @@
-// 24/7 Cloudflare Worker ICT Discord Alert Bot with FVG Fill Detection & Control Panel
+// 24/7 Cloudflare Worker ICT Discord Alert Bot with Custom Per-Timeframe FVG Min Points & GUI Control
 // Runs every 1 minute for free on Cloudflare Workers
 
 const SYMBOLS = [
@@ -8,7 +8,7 @@ const SYMBOLS = [
 ];
 
 const memoryCache = new Set();
-const activeFvgs = new Map(); // Store active FVG levels for fill checks
+const activeFvgs = new Map();
 
 export default {
   async scheduled(event, env, ctx) {
@@ -63,7 +63,11 @@ async function getConfig(env) {
 
   return {
     MSS: { enabled: env.ENABLE_MSS !== "false", timeframes: parseTf(env.MSS_TIMEFRAMES, ["1h", "4h"]) },
-    FVG: { enabled: env.ENABLE_FVG !== "false", timeframes: parseTf(env.FVG_TIMEFRAMES, ["15m", "1h"]) },
+    FVG: {
+      enabled: env.ENABLE_FVG !== "false",
+      timeframes: parseTf(env.FVG_TIMEFRAMES, ["15m", "1h"]),
+      minPoints: { "5m": 50, "15m": 200, "1h": 500, "4h": 1000, "1d": 2000 }
+    },
     FVGFill: { enabled: env.ENABLE_FVG_FILL !== "false", timeframes: parseTf(env.FVG_FILL_TIMEFRAMES, ["15m", "1h"]) },
     OB: { enabled: env.ENABLE_OB !== "false", timeframes: parseTf(env.OB_TIMEFRAMES, ["1h", "4h"]) },
     Liquidity: { enabled: env.ENABLE_LIQUIDITY !== "false", timeframes: parseTf(env.LIQUIDITY_TIMEFRAMES, ["15m", "1h", "4h"]) }
@@ -84,6 +88,8 @@ async function scanAll(env) {
       }
     });
 
+    const pointMultiplier = sym.decimals === 5 ? 100000 : 100;
+
     for (const tf of timeframes) {
       try {
         const candles = await fetchCandles(sym.ticker, tf);
@@ -96,30 +102,41 @@ async function scanAll(env) {
         const timestamp = closedBar.timestamp;
         const currentPrice = closedBar.close;
 
-        // 1. FVG Creation & Tracking
+        // 1. FVG Creation & Tracking with Custom Min Points Threshold
         if (CONFIG.FVG?.enabled && CONFIG.FVG.timeframes.includes(tf)) {
+          const reqMinPoints = Number(CONFIG.FVG.minPoints?.[tf] || 0);
+
           // Bullish FVG
           if (closedBar.low > barTwoBefore.high) {
-            const key = `${sym.ticker}_${tf}_BULL_FVG_${timestamp}`;
-            if (!(await isAlreadyAlerted(env, key))) {
-              await markAsAlerted(env, key);
-              await sendDiscordEmbed(webhookUrl, "🟢 Bullish FVG Formed", sym, tf, currentPrice);
+            const gapPrice = closedBar.low - barTwoBefore.high;
+            const gapPoints = Math.round(gapPrice * pointMultiplier);
 
-              // Track active Bullish FVG level (Top: closedBar.low, Bottom: barTwoBefore.high)
-              const fvgLevelKey = `${sym.ticker}_${tf}_BULL_FVG_LEVEL`;
-              activeFvgs.set(fvgLevelKey, { top: closedBar.low, bottom: barTwoBefore.high, timestamp });
+            if (gapPoints >= reqMinPoints) {
+              const key = `${sym.ticker}_${tf}_BULL_FVG_${timestamp}`;
+              if (!(await isAlreadyAlerted(env, key))) {
+                await markAsAlerted(env, key);
+                await sendDiscordEmbed(webhookUrl, "🟢 Bullish FVG Formed", sym, tf, currentPrice, gapPoints);
+
+                const fvgLevelKey = `${sym.ticker}_${tf}_BULL_FVG_LEVEL`;
+                activeFvgs.set(fvgLevelKey, { top: closedBar.low, bottom: barTwoBefore.high, timestamp, gapPoints });
+              }
             }
           }
+
           // Bearish FVG
           if (closedBar.high < barTwoBefore.low) {
-            const key = `${sym.ticker}_${tf}_BEAR_FVG_${timestamp}`;
-            if (!(await isAlreadyAlerted(env, key))) {
-              await markAsAlerted(env, key);
-              await sendDiscordEmbed(webhookUrl, "🔴 Bearish FVG Formed", sym, tf, currentPrice);
+            const gapPrice = barTwoBefore.low - closedBar.high;
+            const gapPoints = Math.round(gapPrice * pointMultiplier);
 
-              // Track active Bearish FVG level (Bottom: closedBar.high, Top: barTwoBefore.low)
-              const fvgLevelKey = `${sym.ticker}_${tf}_BEAR_FVG_LEVEL`;
-              activeFvgs.set(fvgLevelKey, { bottom: closedBar.high, top: barTwoBefore.low, timestamp });
+            if (gapPoints >= reqMinPoints) {
+              const key = `${sym.ticker}_${tf}_BEAR_FVG_${timestamp}`;
+              if (!(await isAlreadyAlerted(env, key))) {
+                await markAsAlerted(env, key);
+                await sendDiscordEmbed(webhookUrl, "🔴 Bearish FVG Formed", sym, tf, currentPrice, gapPoints);
+
+                const fvgLevelKey = `${sym.ticker}_${tf}_BEAR_FVG_LEVEL`;
+                activeFvgs.set(fvgLevelKey, { bottom: closedBar.high, top: barTwoBefore.low, timestamp, gapPoints });
+              }
             }
           }
         }
@@ -129,13 +146,12 @@ async function scanAll(env) {
           const bullFvgKey = `${sym.ticker}_${tf}_BULL_FVG_LEVEL`;
           const activeBullFvg = activeFvgs.get(bullFvgKey);
           if (activeBullFvg && closedBar.timestamp > activeBullFvg.timestamp) {
-            // Price dips down into the Bullish FVG gap
             if (closedBar.low <= activeBullFvg.top) {
               const fillKey = `${sym.ticker}_${tf}_BULL_FVG_FILLED_${activeBullFvg.timestamp}`;
               if (!(await isAlreadyAlerted(env, fillKey))) {
                 await markAsAlerted(env, fillKey);
-                await sendDiscordEmbed(webhookUrl, "🎯 Bullish FVG Filled / Tapped", sym, tf, currentPrice);
-                activeFvgs.delete(bullFvgKey); // Remove after fill
+                await sendDiscordEmbed(webhookUrl, "🎯 Bullish FVG Filled / Tapped", sym, tf, currentPrice, activeBullFvg.gapPoints);
+                activeFvgs.delete(bullFvgKey);
               }
             }
           }
@@ -143,13 +159,12 @@ async function scanAll(env) {
           const bearFvgKey = `${sym.ticker}_${tf}_BEAR_FVG_LEVEL`;
           const activeBearFvg = activeFvgs.get(bearFvgKey);
           if (activeBearFvg && closedBar.timestamp > activeBearFvg.timestamp) {
-            // Price rallies up into the Bearish FVG gap
             if (closedBar.high >= activeBearFvg.bottom) {
               const fillKey = `${sym.ticker}_${tf}_BEAR_FVG_FILLED_${activeBearFvg.timestamp}`;
               if (!(await isAlreadyAlerted(env, fillKey))) {
                 await markAsAlerted(env, fillKey);
-                await sendDiscordEmbed(webhookUrl, "🎯 Bearish FVG Filled / Tapped", sym, tf, currentPrice);
-                activeFvgs.delete(bearFvgKey); // Remove after fill
+                await sendDiscordEmbed(webhookUrl, "🎯 Bearish FVG Filled / Tapped", sym, tf, currentPrice, activeBearFvg.gapPoints);
+                activeFvgs.delete(bearFvgKey);
               }
             }
           }
@@ -264,7 +279,7 @@ async function fetchCandles(ticker, timeframe) {
   return candles;
 }
 
-async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price) {
+async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price, gapPoints = null) {
   const priceFormatted = price.toFixed(symbol.decimals || 4);
 
   const dhakaTime = new Date().toLocaleString("en-US", {
@@ -281,9 +296,16 @@ async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price
   const chartImgUrl = `https://api.chart-img.com/v1/tradingview/advanced-chart?symbol=${encodeURIComponent(symbol.tvSymbol)}&interval=${timeframe}&theme=dark`;
   const tradingViewUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(symbol.tvSymbol)}`;
 
+  let desc = `**Symbol:** \`${symbol.name}\`\n**Timeframe:** \`${timeframe}\`\n**Current Price:** \`${priceFormatted}\``;
+  if (gapPoints !== null) {
+    const pips = (gapPoints / 10).toFixed(1);
+    desc += `\n**FVG Gap Size:** \`${gapPoints} Points\` (\`${pips} Pips\`)`;
+  }
+  desc += `\n**Time (Dhaka):** \`${dhakaTime}\`\n\n📈 [Open Live Chart on TradingView](${tradingViewUrl})`;
+
   const embed = {
     title: `🚨 ${eventTitle}`,
-    description: `**Symbol:** \`${symbol.name}\`\n**Timeframe:** \`${timeframe}\`\n**Current Price:** \`${priceFormatted}\`\n**Time (Dhaka):** \`${dhakaTime}\`\n\n📈 [Open Live Chart on TradingView](${tradingViewUrl})`,
+    description: desc,
     color: eventTitle.includes("Bullish") || eventTitle.includes("Taken") ? 0x00E6A1 : 0xE60400,
     image: { url: chartImgUrl },
     footer: { text: "Cloudflare Worker ICT Scanner (Dhaka Time)" }
@@ -301,6 +323,8 @@ function renderAdminHTML(settings) {
   const labels = { FVG: "FVG Formed", FVGFill: "FVG Filled / Mitigated", MSS: "MSS Shift", OB: "Order Block", Liquidity: "Liquidity Sweep" };
   const allTfs = ["5m", "15m", "1h", "4h", "1d"];
 
+  const fvgMinPoints = settings.FVG?.minPoints || { "5m": 50, "15m": 200, "1h": 500, "4h": 1000, "1d": 2000 };
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -308,14 +332,19 @@ function renderAdminHTML(settings) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ICT Bot Control Panel</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; max-width: 600px; margin: auto; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; max-width: 650px; margin: auto; }
     h1 { color: #38bdf8; font-size: 24px; text-align: center; }
     .card { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
     .header { display: flex; justify-content: space-between; align-items: center; }
     .title { font-weight: bold; font-size: 18px; color: #f1f5f9; }
+    .sub-title { font-size: 13px; color: #94a3b8; margin-top: 4px; }
     .tf-group { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
     .btn { background: #334155; border: 1px solid #475569; color: #94a3b8; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; }
     .btn.active { background: #0284c7; color: #ffffff; border-color: #38bdf8; }
+    .min-points-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; margin-top: 14px; background: #0f172a; padding: 12px; border-radius: 8px; }
+    .min-points-item { display: flex; flex-direction: column; gap: 4px; }
+    .min-points-item label { font-size: 12px; font-weight: bold; color: #38bdf8; }
+    .min-points-item input { background: #1e293b; border: 1px solid #475569; color: white; padding: 6px; border-radius: 6px; font-weight: bold; text-align: center; }
     .save-btn { width: 100%; background: #10b981; color: white; border: none; padding: 14px; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 20px; }
     .save-btn:hover { background: #059669; }
     .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
@@ -336,7 +365,10 @@ function renderAdminHTML(settings) {
       return `
       <div class="card">
         <div class="header">
-          <span class="title">${labels[pat] || pat}</span>
+          <div>
+            <div class="title">${labels[pat] || pat}</div>
+            ${pat === 'FVG' ? '<div class="sub-title">Set Minimum FVG Size in Points for each timeframe below:</div>' : ''}
+          </div>
           <label class="switch">
             <input type="checkbox" id="${pat}_enabled" ${pData.enabled ? "checked" : ""}>
             <span class="slider"></span>
@@ -347,6 +379,18 @@ function renderAdminHTML(settings) {
             <button type="button" class="btn ${pData.timeframes.includes(tf) ? "active" : ""}" onclick="toggleTf('${pat}', '${tf}', this)">${tf}</button>
           `).join('')}
         </div>
+
+        ${pat === 'FVG' ? `
+        <div class="min-points-grid">
+          ${allTfs.map(tf => `
+            <div class="min-points-item">
+              <label>${tf} Min Points</label>
+              <input type="number" id="fvg_min_${tf}" value="${fvgMinPoints[tf] || 200}" placeholder="200">
+            </div>
+          `).join('')}
+        </div>
+        ` : ''}
+
       </div>`;
     }).join('')}
     <button type="submit" class="save-btn">💾 Save Settings Instant</button>
@@ -373,6 +417,12 @@ function renderAdminHTML(settings) {
       ['FVG', 'FVGFill', 'MSS', 'OB', 'Liquidity'].forEach(pat => {
         if (!settings[pat]) settings[pat] = { enabled: true, timeframes: [] };
         settings[pat].enabled = document.getElementById(pat + '_enabled').checked;
+      });
+
+      if (!settings.FVG.minPoints) settings.FVG.minPoints = {};
+      ['5m', '15m', '1h', '4h', '1d'].forEach(tf => {
+        const val = document.getElementById('fvg_min_' + tf);
+        if (val) settings.FVG.minPoints[tf] = Number(val.value);
       });
 
       const res = await fetch('/api/settings', {
