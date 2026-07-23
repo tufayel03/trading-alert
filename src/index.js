@@ -172,12 +172,23 @@ async function fetchCandles(ticker, timeframe) {
 async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price) {
   const chartImgUrl = `https://api.chart-img.com/v2/tradingview/advanced-chart?symbol=${encodeURIComponent(symbol.tvSymbol)}&interval=${timeframe}&theme=dark`;
 
+  const dhakaTime = new Date().toLocaleString("en-US", {
+    timeZone: "Asia/Dhaka",
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true
+  });
+
   const embed = {
     title: `🚨 ${eventTitle}`,
-    description: `**Symbol:** \`${symbol.name}\`\n**Timeframe:** \`${timeframe}\`\n**Current Price:** \`${price.toFixed(4)}\`\n**Time:** \`${new Date().toISOString().replace('T', ' ').substring(0, 16)} UTC\``,
+    description: `**Symbol:** \`${symbol.name}\`\n**Timeframe:** \`${timeframe}\`\n**Current Price:** \`${price.toFixed(4)}\`\n**Time (Dhaka):** \`${dhakaTime}\``,
     color: eventTitle.includes("Bullish") || eventTitle.includes("Taken") ? 0x00E6A1 : 0xE60400,
     image: { url: chartImgUrl },
-    footer: { text: "Cloudflare Worker 1-Min ICT Scanner" }
+    footer: { text: "Cloudflare Worker ICT Scanner (Dhaka Time)" }
   };
 
   await fetch(webhookUrl, {
