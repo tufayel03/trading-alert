@@ -35,6 +35,25 @@ export default {
       }
     }
 
+    // Direct Webhook Endpoint for TradingView Native Alerts (Captures live chart screen with Pine Script indicator!)
+    if (url.pathname === "/api/webhook" && request.method === "POST") {
+      try {
+        const body = await request.json();
+        const config = await getConfig(env);
+        const webhookUrl = config.discordWebhookUrl || DEFAULT_WEBHOOK;
+
+        const symbol = body.symbol || "XAUUSD";
+        const timeframe = body.timeframe || "15m";
+        const message = body.message || "ICT Pattern Detected!";
+        const chartImg = body.image || body.chart_image || generateTradingViewChartUrl("OANDA:XAUUSD", timeframe, config.chartTheme || "light");
+
+        await sendDiscordEmbed(webhookUrl, message, { name: symbol, tvSymbol: symbol, decimals: 2 }, timeframe, body.price || 4045.0, null, chartImg);
+        return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), { status: 400 });
+      }
+    }
+
     // Send Test Alert API
     if (url.pathname === "/api/test-alert" && request.method === "POST") {
       let reqBody = {};
@@ -44,11 +63,6 @@ export default {
       const webhookUrl = reqBody.discordWebhookUrl || config.discordWebhookUrl || env.DISCORD_WEBHOOK_URL || DEFAULT_WEBHOOK;
       const chartTheme = reqBody.chartTheme || config.chartTheme || "light";
 
-      if (!webhookUrl) {
-        return new Response(JSON.stringify({ error: "No Discord Webhook URL provided! Please enter it in the Control Panel input field." }), { status: 400 });
-      }
-
-      // Save webhook & theme to state if passed
       if (reqBody.discordWebhookUrl || reqBody.chartTheme) {
         if (reqBody.discordWebhookUrl) config.discordWebhookUrl = reqBody.discordWebhookUrl;
         if (reqBody.chartTheme) config.chartTheme = reqBody.chartTheme;
@@ -63,10 +77,10 @@ export default {
       try {
         const goldSym = SYMBOLS[2]; // XAUUSD Gold
         const realCandles = await fetchCandles(goldSym.ticker, "15m");
-        const currentPrice = realCandles && realCandles.length > 0 ? realCandles[realCandles.length - 1].close : 2415.50;
+        const currentPrice = realCandles && realCandles.length > 0 ? realCandles[realCandles.length - 1].close : 4047.50;
         const chartImgUrl = generateTradingViewChartUrl(goldSym.tvSymbol, "15m", chartTheme);
 
-        await sendDiscordEmbed(webhookUrl, "🧪 Test Alert - TUF Capital TradingView Chart", goldSym, "15m", currentPrice, 350, chartImgUrl);
+        await sendDiscordEmbed(webhookUrl, "🧪 Test Alert - TUF Capital Clean Chart (No Volume)", goldSym, "15m", currentPrice, 350, chartImgUrl);
         return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
       } catch (e) {
         return new Response(JSON.stringify({ error: e.message }), { status: 500 });
@@ -338,7 +352,8 @@ async function fetchCandles(ticker, timeframe) {
 function generateTradingViewChartUrl(tvSymbol, timeframe, theme = "light") {
   const tfMap = { "5m": "5", "15m": "15", "1h": "60", "4h": "240", "1d": "D" };
   const interval = tfMap[timeframe] || "15";
-  const widgetUrl = `https://s.tradingview.com/widgetembed/?symbol=${encodeURIComponent(tvSymbol)}&interval=${interval}&theme=${theme}`;
+  // hide_volume=true removes volume bars from the bottom of the chart
+  const widgetUrl = `https://s.tradingview.com/widgetembed/?symbol=${encodeURIComponent(tvSymbol)}&interval=${interval}&theme=${theme}&hide_volume=true`;
   return `https://api.microlink.io/?url=${encodeURIComponent(widgetUrl)}&screenshot=true&embed=screenshot.url`;
 }
 
@@ -447,12 +462,12 @@ function renderAdminHTML(settings) {
     <div class="title">🎨 Chart Theme Preference</div>
     <div class="sub-title">Select White (Light Theme) or Dark Theme for alert screenshots:</div>
     <select id="chartTheme" class="theme-select">
-      <option value="light" ${chartTheme === 'light' ? 'selected' : ''}>☀️ White Theme (Matching Your Chart)</option>
-      <option value="dark" ${chartTheme === 'dark' ? 'selected' : ''}>🌙 Dark Theme</option>
+      <option value="light" ${chartTheme === 'light' ? 'selected' : ''}>☀️ White Theme (Clean - No Volume)</option>
+      <option value="dark" ${chartTheme === 'dark' ? 'selected' : ''}>🌙 Dark Theme (Clean - No Volume)</option>
     </select>
   </div>
 
-  <button type="button" class="test-btn" onclick="sendTestAlert()">🧪 Send TUF Capital Test Alert</button>
+  <button type="button" class="test-btn" onclick="sendTestAlert()">🧪 Send TUF Capital Test Alert (Clean Chart)</button>
 
   <form id="configForm" style="margin-top: 15px;">
     ${patterns.map(pat => {
@@ -503,7 +518,6 @@ function renderAdminHTML(settings) {
     const settings = ${JSON.stringify(settings)};
     const defaultWebhook = "${DEFAULT_WEBHOOK}";
 
-    // Auto restore Webhook URL & Theme from localStorage
     window.addEventListener('DOMContentLoaded', () => {
       const savedLocalWebhook = localStorage.getItem('ict_discord_webhook_url');
       const webhookInput = document.getElementById('discordWebhookUrl');
