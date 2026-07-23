@@ -1,0 +1,50 @@
+//@version=5
+indicator("ICT All-In-One Scanner (FVG, MSS, OB, Liquidity)", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+
+// --- CONFIGURATION INPUTS ---
+group_fvg = "Fair Value Gap (FVG) Settings"
+showFvg = input.bool(true, "Show FVG Boxes", group=group_fvg)
+fvgBullColor = input.color(color.new(#10b981, 80), "Bullish FVG Color", group=group_fvg)
+fvgBearColor = input.color(color.new(#ef4444, 80), "Bearish FVG Color", group=group_fvg)
+
+group_mss = "Market Structure Shift (MSS)"
+showMss = input.bool(true, "Show MSS Shift", group=group_mss)
+
+group_liq = "Liquidity Sweeps (BSL / SSL)"
+showLiquidity = input.bool(true, "Show Liquidity Sweeps", group=group_liq)
+
+// --- 1. FAIR VALUE GAP (FVG) DETECTION ---
+bullFvg = low > high[2]
+bearFvg = high < low[2]
+
+if showFvg and bullFvg
+    box.new(left=bar_index-2, top=low, right=bar_index+10, bottom=high[2], bgcolor=fvgBullColor, border_color=#10b981, border_style=line.style_dashed)
+
+if showFvg and bearFvg
+    box.new(left=bar_index-2, top=low[2], right=bar_index+10, bottom=high, bgcolor=fvgBearColor, border_color=#ef4444, border_style=line.style_dashed)
+
+// --- 2. MARKET STRUCTURE SHIFT (MSS) ---
+lookback = 10
+highestHigh = ta.highest(high, lookback)[1]
+lowestLow = ta.lowest(low, lookback)[1]
+
+bullMss = ta.crossover(close, highestHigh)
+bearMss = ta.crossunder(close, lowestLow)
+
+if showMss and bullMss
+    line.new(bar_index - lookback, highestHigh, bar_index, highestHigh, color=#10b981, width=2, style=line.style_solid)
+    label.new(bar_index, high, "🟢 Bullish MSS", color=#10b981, textcolor=color.white, style=label.style_label_down)
+
+if showMss and bearMss
+    line.new(bar_index - lookback, lowestLow, bar_index, lowestLow, color=#ef4444, width=2, style=line.style_solid)
+    label.new(bar_index, low, "🔴 Bearish MSS", color=#ef4444, textcolor=color.white, style=label.style_label_up)
+
+// --- 3. LIQUIDITY SWEEPS (BSL / SSL) ---
+bslSweep = high > highestHigh and close < highestHigh
+sslSweep = low < lowestLow and close > lowestLow
+
+if showLiquidity and bslSweep
+    label.new(bar_index, high, "💥 BSL Swept", color=#f59e0b, textcolor=color.black, style=label.style_label_down)
+
+if showLiquidity and sslSweep
+    label.new(bar_index, low, "💥 SSL Swept", color=#8b5cf6, textcolor=color.white, style=label.style_label_up)
