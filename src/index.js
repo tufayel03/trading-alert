@@ -1,4 +1,4 @@
-// 24/7 Cloudflare Worker ICT Discord Alert Bot with Webhook URL GUI Input
+// 24/7 Cloudflare Worker ICT Discord Alert Bot with Working Direct PNG Chart Image Previews
 // Runs every 1 minute for free on Cloudflare Workers
 
 const SYMBOLS = [
@@ -41,7 +41,13 @@ export default {
         return new Response(JSON.stringify({ error: "No Discord Webhook URL provided! Please enter it in the Control Panel." }), { status: 400 });
       }
       try {
-        await sendDiscordEmbed(webhookUrl, "🧪 Test Alert - ICT Scanner Working!", SYMBOLS[2], "15m", 2415.50, 500);
+        const sampleCandles = [
+          { timestamp: 1700000000, open: 2400.0, high: 2410.0, low: 2395.0, close: 2405.0 },
+          { timestamp: 1700000900, open: 2405.0, high: 2420.0, low: 2402.0, close: 2418.0 },
+          { timestamp: 1700001800, open: 2418.0, high: 2425.0, low: 2412.0, close: 2415.5 }
+        ];
+        const chartImgUrl = generateChartImageUrl("XAUUSD (Gold)", "15m", sampleCandles);
+        await sendDiscordEmbed(webhookUrl, "🧪 Test Alert - ICT Scanner Working!", SYMBOLS[2], "15m", 2415.50, 500, chartImgUrl);
         return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
       } catch (e) {
         return new Response(JSON.stringify({ error: e.message }), { status: 500 });
@@ -76,7 +82,6 @@ async function getConfig(env) {
   }
 
   const parseTf = (envVal, defaultArray) => envVal ? envVal.split(",").map(s => s.trim()) : defaultArray;
-
   const fallbackWebhook = env.DISCORD_WEBHOOK_URL || "";
 
   if (custom) {
@@ -126,6 +131,7 @@ async function scanAll(env) {
         
         const timestamp = closedBar.timestamp;
         const currentPrice = closedBar.close;
+        const chartImgUrl = generateChartImageUrl(sym.name, tf, candles);
 
         // 1. FVG Creation & Tracking with Min Points Filter
         if (CONFIG.FVG?.enabled && CONFIG.FVG.timeframes.includes(tf)) {
@@ -144,7 +150,7 @@ async function scanAll(env) {
               const key = `${sym.ticker}_${tf}_BULL_FVG_${timestamp}`;
               if (!(await isAlreadyAlerted(env, key))) {
                 await markAsAlerted(env, key);
-                await sendDiscordEmbed(webhookUrl, "🟢 Bullish FVG Formed", sym, tf, currentPrice, gapPoints);
+                await sendDiscordEmbed(webhookUrl, "🟢 Bullish FVG Formed", sym, tf, currentPrice, gapPoints, chartImgUrl);
 
                 const fvgLevelKey = `${sym.ticker}_${tf}_BULL_FVG_LEVEL`;
                 activeFvgs.set(fvgLevelKey, { top: closedBar.low, bottom: barTwoBefore.high, timestamp, gapPoints });
@@ -161,7 +167,7 @@ async function scanAll(env) {
               const key = `${sym.ticker}_${tf}_BEAR_FVG_${timestamp}`;
               if (!(await isAlreadyAlerted(env, key))) {
                 await markAsAlerted(env, key);
-                await sendDiscordEmbed(webhookUrl, "🔴 Bearish FVG Formed", sym, tf, currentPrice, gapPoints);
+                await sendDiscordEmbed(webhookUrl, "🔴 Bearish FVG Formed", sym, tf, currentPrice, gapPoints, chartImgUrl);
 
                 const fvgLevelKey = `${sym.ticker}_${tf}_BEAR_FVG_LEVEL`;
                 activeFvgs.set(fvgLevelKey, { bottom: closedBar.high, top: barTwoBefore.low, timestamp, gapPoints });
@@ -179,7 +185,7 @@ async function scanAll(env) {
               const fillKey = `${sym.ticker}_${tf}_BULL_FVG_FILLED_${activeBullFvg.timestamp}`;
               if (!(await isAlreadyAlerted(env, fillKey))) {
                 await markAsAlerted(env, fillKey);
-                await sendDiscordEmbed(webhookUrl, "🎯 Bullish FVG Filled / Tapped", sym, tf, currentPrice, activeBullFvg.gapPoints);
+                await sendDiscordEmbed(webhookUrl, "🎯 Bullish FVG Filled / Tapped", sym, tf, currentPrice, activeBullFvg.gapPoints, chartImgUrl);
                 activeFvgs.delete(bullFvgKey);
               }
             }
@@ -192,7 +198,7 @@ async function scanAll(env) {
               const fillKey = `${sym.ticker}_${tf}_BEAR_FVG_FILLED_${activeBearFvg.timestamp}`;
               if (!(await isAlreadyAlerted(env, fillKey))) {
                 await markAsAlerted(env, fillKey);
-                await sendDiscordEmbed(webhookUrl, "🎯 Bearish FVG Filled / Tapped", sym, tf, currentPrice, activeBearFvg.gapPoints);
+                await sendDiscordEmbed(webhookUrl, "🎯 Bearish FVG Filled / Tapped", sym, tf, currentPrice, activeBearFvg.gapPoints, chartImgUrl);
                 activeFvgs.delete(bearFvgKey);
               }
             }
@@ -210,7 +216,7 @@ async function scanAll(env) {
             const key = `${sym.ticker}_${tf}_BULL_MSS_${timestamp}`;
             if (!(await isAlreadyAlerted(env, key))) {
               await markAsAlerted(env, key);
-              await sendDiscordEmbed(webhookUrl, "🟢 Bullish MSS Breakout", sym, tf, currentPrice);
+              await sendDiscordEmbed(webhookUrl, "🟢 Bullish MSS Breakout", sym, tf, currentPrice, null, chartImgUrl);
             }
           }
 
@@ -218,7 +224,7 @@ async function scanAll(env) {
             const key = `${sym.ticker}_${tf}_BEAR_MSS_${timestamp}`;
             if (!(await isAlreadyAlerted(env, key))) {
               await markAsAlerted(env, key);
-              await sendDiscordEmbed(webhookUrl, "🔴 Bearish MSS Breakdown", sym, tf, currentPrice);
+              await sendDiscordEmbed(webhookUrl, "🔴 Bearish MSS Breakdown", sym, tf, currentPrice, null, chartImgUrl);
             }
           }
         }
@@ -234,7 +240,7 @@ async function scanAll(env) {
             const key = `${sym.ticker}_${tf}_BSL_SWEEP_${timestamp}`;
             if (!(await isAlreadyAlerted(env, key))) {
               await markAsAlerted(env, key);
-              await sendDiscordEmbed(webhookUrl, "💥 Buyside Liquidity Swept", sym, tf, currentPrice);
+              await sendDiscordEmbed(webhookUrl, "💥 Buyside Liquidity Swept", sym, tf, currentPrice, null, chartImgUrl);
             }
           }
 
@@ -242,7 +248,7 @@ async function scanAll(env) {
             const key = `${sym.ticker}_${tf}_SSL_SWEEP_${timestamp}`;
             if (!(await isAlreadyAlerted(env, key))) {
               await markAsAlerted(env, key);
-              await sendDiscordEmbed(webhookUrl, "💥 Sellside Liquidity Swept", sym, tf, currentPrice);
+              await sendDiscordEmbed(webhookUrl, "💥 Sellside Liquidity Swept", sym, tf, currentPrice, null, chartImgUrl);
             }
           }
         }
@@ -308,7 +314,43 @@ async function fetchCandles(ticker, timeframe) {
   return candles;
 }
 
-async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price, gapPoints = null) {
+function generateChartImageUrl(symbolName, timeframe, candles) {
+  if (!candles || candles.length === 0) return null;
+
+  const slice = candles.slice(-12);
+  const labels = slice.map(c => {
+    const d = new Date(c.timestamp * 1000);
+    return d.toLocaleTimeString("en-US", { timeZone: "Asia/Dhaka", hour: "2-digit", minute: "2-digit", hour12: false });
+  });
+
+  const closes = slice.map(c => Number(c.close.toFixed(4)));
+  const bgColors = slice.map(c => c.close >= c.open ? '#10b981' : '#ef4444');
+
+  const chartConfig = {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: `${symbolName} (${timeframe})`,
+        data: closes,
+        backgroundColor: bgColors,
+        borderWidth: 1
+      }]
+    },
+    options: {
+      legend: { display: false },
+      title: { display: true, text: `📊 ${symbolName} - ${timeframe} Close Prices (Dhaka Time)`, fontColor: '#38bdf8', fontSize: 14 },
+      scales: {
+        xAxes: [{ ticks: { fontColor: '#94a3b8', fontSize: 10 }, gridLines: { color: '#334155' } }],
+        yAxes: [{ ticks: { fontColor: '#94a3b8', fontSize: 10 }, gridLines: { color: '#334155' } }]
+      }
+    }
+  };
+
+  return `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartConfig))}&bkg=0f172a&w=600&h=300&v=3`;
+}
+
+async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price, gapPoints = null, chartImgUrl = null) {
   const priceFormatted = price.toFixed(symbol.decimals || 4);
 
   const dhakaTime = new Date().toLocaleString("en-US", {
@@ -322,7 +364,6 @@ async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price
     hour12: true
   });
 
-  const chartImgUrl = `https://api.chart-img.com/v1/tradingview/advanced-chart?symbol=${encodeURIComponent(symbol.tvSymbol)}&interval=${timeframe}&theme=dark`;
   const tradingViewUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(symbol.tvSymbol)}`;
 
   let titleWithPoints = eventTitle;
@@ -341,9 +382,12 @@ async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price
     title: `🚨 ${titleWithPoints}`,
     description: desc,
     color: eventTitle.includes("Bullish") || eventTitle.includes("Taken") ? 0x00E6A1 : 0xE60400,
-    image: { url: chartImgUrl },
     footer: { text: "Cloudflare Worker ICT Scanner (Dhaka Time)" }
   };
+
+  if (chartImgUrl) {
+    embed.image = { url: chartImgUrl };
+  }
 
   await fetch(webhookUrl, {
     method: "POST",
