@@ -1,4 +1,4 @@
-// 24/7 Cloudflare Worker ICT Discord Alert Bot with Built-in Web Control Panel
+// 24/7 Cloudflare Worker ICT Discord Alert Bot with FVG Fill Detection & Control Panel
 // Runs every 1 minute for free on Cloudflare Workers
 
 const SYMBOLS = [
@@ -8,6 +8,7 @@ const SYMBOLS = [
 ];
 
 const memoryCache = new Set();
+const activeFvgs = new Map(); // Store active FVG levels for fill checks
 
 export default {
   async scheduled(event, env, ctx) {
@@ -17,7 +18,6 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // API to save settings from Web Control Panel
     if (url.pathname === "/api/settings" && request.method === "POST") {
       try {
         const body = await request.json();
@@ -32,7 +32,6 @@ export default {
       }
     }
 
-    // Serve Interactive Web Control Panel UI
     if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/admin")) {
       const settings = await getConfig(env);
       return new Response(renderAdminHTML(settings), {
@@ -40,7 +39,6 @@ export default {
       });
     }
 
-    // Manual trigger for testing
     if (url.pathname === "/scan") {
       await scanAll(env);
       return new Response("Scan triggered manually!", { status: 200 });
@@ -61,12 +59,12 @@ async function getConfig(env) {
 
   if (custom) return custom;
 
-  // Fallback to environment variables or defaults
   const parseTf = (envVal, defaultArray) => envVal ? envVal.split(",").map(s => s.trim()) : defaultArray;
 
   return {
     MSS: { enabled: env.ENABLE_MSS !== "false", timeframes: parseTf(env.MSS_TIMEFRAMES, ["1h", "4h"]) },
     FVG: { enabled: env.ENABLE_FVG !== "false", timeframes: parseTf(env.FVG_TIMEFRAMES, ["15m", "1h"]) },
+    FVGFill: { enabled: env.ENABLE_FVG_FILL !== "false", timeframes: parseTf(env.FVG_FILL_TIMEFRAMES, ["15m", "1h"]) },
     OB: { enabled: env.ENABLE_OB !== "false", timeframes: parseTf(env.OB_TIMEFRAMES, ["1h", "4h"]) },
     Liquidity: { enabled: env.ENABLE_LIQUIDITY !== "false", timeframes: parseTf(env.LIQUIDITY_TIMEFRAMES, ["15m", "1h", "4h"]) }
   };
@@ -80,7 +78,7 @@ async function scanAll(env) {
 
   for (const sym of SYMBOLS) {
     const timeframes = new Set();
-    ["MSS", "FVG", "OB", "Liquidity"].forEach(pattern => {
+    ["MSS", "FVG", "FVGFill", "OB", "Liquidity"].forEach(pattern => {
       if (CONFIG[pattern] && CONFIG[pattern].enabled) {
         (CONFIG[pattern].timeframes || []).forEach(tf => timeframes.add(tf));
       }
@@ -98,25 +96,66 @@ async function scanAll(env) {
         const timestamp = closedBar.timestamp;
         const currentPrice = closedBar.close;
 
-        // 1. FVG Detection
+        // 1. FVG Creation & Tracking
         if (CONFIG.FVG?.enabled && CONFIG.FVG.timeframes.includes(tf)) {
+          // Bullish FVG
           if (closedBar.low > barTwoBefore.high) {
             const key = `${sym.ticker}_${tf}_BULL_FVG_${timestamp}`;
             if (!(await isAlreadyAlerted(env, key))) {
               await markAsAlerted(env, key);
               await sendDiscordEmbed(webhookUrl, "🟢 Bullish FVG Formed", sym, tf, currentPrice);
+
+              // Track active Bullish FVG level (Top: closedBar.low, Bottom: barTwoBefore.high)
+              const fvgLevelKey = `${sym.ticker}_${tf}_BULL_FVG_LEVEL`;
+              activeFvgs.set(fvgLevelKey, { top: closedBar.low, bottom: barTwoBefore.high, timestamp });
             }
           }
+          // Bearish FVG
           if (closedBar.high < barTwoBefore.low) {
             const key = `${sym.ticker}_${tf}_BEAR_FVG_${timestamp}`;
             if (!(await isAlreadyAlerted(env, key))) {
               await markAsAlerted(env, key);
               await sendDiscordEmbed(webhookUrl, "🔴 Bearish FVG Formed", sym, tf, currentPrice);
+
+              // Track active Bearish FVG level (Bottom: closedBar.high, Top: barTwoBefore.low)
+              const fvgLevelKey = `${sym.ticker}_${tf}_BEAR_FVG_LEVEL`;
+              activeFvgs.set(fvgLevelKey, { bottom: closedBar.high, top: barTwoBefore.low, timestamp });
             }
           }
         }
 
-        // 2. MSS Detection
+        // 2. FVG Fill / Mitigation Detection
+        if (CONFIG.FVGFill?.enabled && CONFIG.FVGFill.timeframes.includes(tf)) {
+          const bullFvgKey = `${sym.ticker}_${tf}_BULL_FVG_LEVEL`;
+          const activeBullFvg = activeFvgs.get(bullFvgKey);
+          if (activeBullFvg && closedBar.timestamp > activeBullFvg.timestamp) {
+            // Price dips down into the Bullish FVG gap
+            if (closedBar.low <= activeBullFvg.top) {
+              const fillKey = `${sym.ticker}_${tf}_BULL_FVG_FILLED_${activeBullFvg.timestamp}`;
+              if (!(await isAlreadyAlerted(env, fillKey))) {
+                await markAsAlerted(env, fillKey);
+                await sendDiscordEmbed(webhookUrl, "🎯 Bullish FVG Filled / Tapped", sym, tf, currentPrice);
+                activeFvgs.delete(bullFvgKey); // Remove after fill
+              }
+            }
+          }
+
+          const bearFvgKey = `${sym.ticker}_${tf}_BEAR_FVG_LEVEL`;
+          const activeBearFvg = activeFvgs.get(bearFvgKey);
+          if (activeBearFvg && closedBar.timestamp > activeBearFvg.timestamp) {
+            // Price rallies up into the Bearish FVG gap
+            if (closedBar.high >= activeBearFvg.bottom) {
+              const fillKey = `${sym.ticker}_${tf}_BEAR_FVG_FILLED_${activeBearFvg.timestamp}`;
+              if (!(await isAlreadyAlerted(env, fillKey))) {
+                await markAsAlerted(env, fillKey);
+                await sendDiscordEmbed(webhookUrl, "🎯 Bearish FVG Filled / Tapped", sym, tf, currentPrice);
+                activeFvgs.delete(bearFvgKey); // Remove after fill
+              }
+            }
+          }
+        }
+
+        // 3. MSS Detection
         if (CONFIG.MSS?.enabled && CONFIG.MSS.timeframes.includes(tf)) {
           const recentHighs = candles.slice(-12, -3).map(c => c.high);
           const recentLows = candles.slice(-12, -3).map(c => c.low);
@@ -140,7 +179,7 @@ async function scanAll(env) {
           }
         }
 
-        // 3. Liquidity Sweep Detection
+        // 4. Liquidity Sweep Detection
         if (CONFIG.Liquidity?.enabled && CONFIG.Liquidity.timeframes.includes(tf)) {
           const recentHighs = candles.slice(-15, -3).map(c => c.high);
           const recentLows = candles.slice(-15, -3).map(c => c.low);
@@ -258,7 +297,8 @@ async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price
 }
 
 function renderAdminHTML(settings) {
-  const patterns = ["FVG", "MSS", "OB", "Liquidity"];
+  const patterns = ["FVG", "FVGFill", "MSS", "OB", "Liquidity"];
+  const labels = { FVG: "FVG Formed", FVGFill: "FVG Filled / Mitigated", MSS: "MSS Shift", OB: "Order Block", Liquidity: "Liquidity Sweep" };
   const allTfs = ["5m", "15m", "1h", "4h", "1d"];
 
   return `<!DOCTYPE html>
@@ -296,7 +336,7 @@ function renderAdminHTML(settings) {
       return `
       <div class="card">
         <div class="header">
-          <span class="title">${pat} Alerts</span>
+          <span class="title">${labels[pat] || pat}</span>
           <label class="switch">
             <input type="checkbox" id="${pat}_enabled" ${pData.enabled ? "checked" : ""}>
             <span class="slider"></span>
@@ -316,6 +356,7 @@ function renderAdminHTML(settings) {
     const settings = ${JSON.stringify(settings)};
 
     function toggleTf(pattern, tf, btn) {
+      if (!settings[pattern]) settings[pattern] = { enabled: true, timeframes: [] };
       if (!settings[pattern].timeframes) settings[pattern].timeframes = [];
       const idx = settings[pattern].timeframes.indexOf(tf);
       if (idx > -1) {
@@ -329,7 +370,8 @@ function renderAdminHTML(settings) {
 
     document.getElementById('configForm').onsubmit = async (e) => {
       e.preventDefault();
-      ['FVG', 'MSS', 'OB', 'Liquidity'].forEach(pat => {
+      ['FVG', 'FVGFill', 'MSS', 'OB', 'Liquidity'].forEach(pat => {
+        if (!settings[pat]) settings[pat] = { enabled: true, timeframes: [] };
         settings[pat].enabled = document.getElementById(pat + '_enabled').checked;
       });
 
