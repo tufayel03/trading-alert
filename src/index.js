@@ -1,4 +1,4 @@
-// 24/7 Cloudflare Worker ICT Discord Alert Bot with Custom Per-Timeframe FVG Min Points & GUI Control
+// 24/7 Cloudflare Worker ICT Discord Alert Bot with Separate Forex & Gold FVG Min Points GUI Controls
 // Runs every 1 minute for free on Cloudflare Workers
 
 const SYMBOLS = [
@@ -66,7 +66,8 @@ async function getConfig(env) {
     FVG: {
       enabled: env.ENABLE_FVG !== "false",
       timeframes: parseTf(env.FVG_TIMEFRAMES, ["15m", "1h"]),
-      minPoints: { "5m": 50, "15m": 200, "1h": 500, "4h": 1000, "1d": 2000 }
+      minPointsForex: { "5m": 50, "15m": 100, "1h": 200, "4h": 500, "1d": 1000 },
+      minPointsGold: { "5m": 100, "15m": 300, "1h": 500, "4h": 1000, "1d": 2000 }
     },
     FVGFill: { enabled: env.ENABLE_FVG_FILL !== "false", timeframes: parseTf(env.FVG_FILL_TIMEFRAMES, ["15m", "1h"]) },
     OB: { enabled: env.ENABLE_OB !== "false", timeframes: parseTf(env.OB_TIMEFRAMES, ["1h", "4h"]) },
@@ -88,7 +89,8 @@ async function scanAll(env) {
       }
     });
 
-    const pointMultiplier = sym.decimals === 5 ? 100000 : 100;
+    const isGold = sym.ticker === "GC=F";
+    const pointMultiplier = isGold ? 100 : 100000;
 
     for (const tf of timeframes) {
       try {
@@ -102,9 +104,13 @@ async function scanAll(env) {
         const timestamp = closedBar.timestamp;
         const currentPrice = closedBar.close;
 
-        // 1. FVG Creation & Tracking with Custom Min Points Threshold
+        // 1. FVG Creation & Tracking with Separate Forex vs Gold Min Points
         if (CONFIG.FVG?.enabled && CONFIG.FVG.timeframes.includes(tf)) {
-          const reqMinPoints = Number(CONFIG.FVG.minPoints?.[tf] || 0);
+          const reqMinPoints = Number(
+            isGold
+              ? (CONFIG.FVG.minPointsGold?.[tf] ?? 300)
+              : (CONFIG.FVG.minPointsForex?.[tf] ?? 100)
+          );
 
           // Bullish FVG
           if (closedBar.low > barTwoBefore.high) {
@@ -323,7 +329,8 @@ function renderAdminHTML(settings) {
   const labels = { FVG: "FVG Formed", FVGFill: "FVG Filled / Mitigated", MSS: "MSS Shift", OB: "Order Block", Liquidity: "Liquidity Sweep" };
   const allTfs = ["5m", "15m", "1h", "4h", "1d"];
 
-  const fvgMinPoints = settings.FVG?.minPoints || { "5m": 50, "15m": 200, "1h": 500, "4h": 1000, "1d": 2000 };
+  const forexMinPoints = settings.FVG?.minPointsForex || { "5m": 50, "15m": 100, "1h": 200, "4h": 500, "1d": 1000 };
+  const goldMinPoints = settings.FVG?.minPointsGold || { "5m": 100, "15m": 300, "1h": 500, "4h": 1000, "1d": 2000 };
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -337,13 +344,13 @@ function renderAdminHTML(settings) {
     .card { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
     .header { display: flex; justify-content: space-between; align-items: center; }
     .title { font-weight: bold; font-size: 18px; color: #f1f5f9; }
-    .sub-title { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+    .section-label { font-size: 13px; font-weight: bold; color: #fbbf24; margin-top: 12px; margin-bottom: 4px; }
     .tf-group { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
     .btn { background: #334155; border: 1px solid #475569; color: #94a3b8; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; }
     .btn.active { background: #0284c7; color: #ffffff; border-color: #38bdf8; }
-    .min-points-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; margin-top: 14px; background: #0f172a; padding: 12px; border-radius: 8px; }
+    .min-points-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; margin-top: 8px; background: #0f172a; padding: 12px; border-radius: 8px; }
     .min-points-item { display: flex; flex-direction: column; gap: 4px; }
-    .min-points-item label { font-size: 12px; font-weight: bold; color: #38bdf8; }
+    .min-points-item label { font-size: 11px; font-weight: bold; color: #38bdf8; }
     .min-points-item input { background: #1e293b; border: 1px solid #475569; color: white; padding: 6px; border-radius: 6px; font-weight: bold; text-align: center; }
     .save-btn { width: 100%; background: #10b981; color: white; border: none; padding: 14px; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 20px; }
     .save-btn:hover { background: #059669; }
@@ -365,10 +372,7 @@ function renderAdminHTML(settings) {
       return `
       <div class="card">
         <div class="header">
-          <div>
-            <div class="title">${labels[pat] || pat}</div>
-            ${pat === 'FVG' ? '<div class="sub-title">Set Minimum FVG Size in Points for each timeframe below:</div>' : ''}
-          </div>
+          <div class="title">${labels[pat] || pat}</div>
           <label class="switch">
             <input type="checkbox" id="${pat}_enabled" ${pData.enabled ? "checked" : ""}>
             <span class="slider"></span>
@@ -381,11 +385,22 @@ function renderAdminHTML(settings) {
         </div>
 
         ${pat === 'FVG' ? `
+        <div class="section-label">💱 Forex FVG Min Points (EURUSD, GBPUSD)</div>
         <div class="min-points-grid">
           ${allTfs.map(tf => `
             <div class="min-points-item">
-              <label>${tf} Min Points</label>
-              <input type="number" id="fvg_min_${tf}" value="${fvgMinPoints[tf] || 200}" placeholder="200">
+              <label>${tf} Points</label>
+              <input type="number" id="forex_fvg_min_${tf}" value="${forexMinPoints[tf] || 100}" placeholder="100">
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="section-label">🥇 Gold FVG Min Points (XAUUSD) ($1.00 = 100 pts)</div>
+        <div class="min-points-grid">
+          ${allTfs.map(tf => `
+            <div class="min-points-item">
+              <label>${tf} Points</label>
+              <input type="number" id="gold_fvg_min_${tf}" value="${goldMinPoints[tf] || 300}" placeholder="300">
             </div>
           `).join('')}
         </div>
@@ -419,10 +434,15 @@ function renderAdminHTML(settings) {
         settings[pat].enabled = document.getElementById(pat + '_enabled').checked;
       });
 
-      if (!settings.FVG.minPoints) settings.FVG.minPoints = {};
+      if (!settings.FVG.minPointsForex) settings.FVG.minPointsForex = {};
+      if (!settings.FVG.minPointsGold) settings.FVG.minPointsGold = {};
+
       ['5m', '15m', '1h', '4h', '1d'].forEach(tf => {
-        const val = document.getElementById('fvg_min_' + tf);
-        if (val) settings.FVG.minPoints[tf] = Number(val.value);
+        const forexVal = document.getElementById('forex_fvg_min_' + tf);
+        if (forexVal) settings.FVG.minPointsForex[tf] = Number(forexVal.value);
+
+        const goldVal = document.getElementById('gold_fvg_min_' + tf);
+        if (goldVal) settings.FVG.minPointsGold[tf] = Number(goldVal.value);
       });
 
       const res = await fetch('/api/settings', {
