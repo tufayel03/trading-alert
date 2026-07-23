@@ -1,4 +1,4 @@
-// 24/7 Cloudflare Worker ICT Discord Alert Bot with Custom TradingView Chart Screenshots
+// 24/7 Cloudflare Worker ICT Discord Alert Bot with High-Res Light/Dark TradingView Screenshots
 // Runs every 1 minute for free on Cloudflare Workers
 
 const SYMBOLS = [
@@ -40,16 +40,16 @@ export default {
       
       const config = await getConfig(env);
       const webhookUrl = reqBody.discordWebhookUrl || config.discordWebhookUrl || env.DISCORD_WEBHOOK_URL;
-      const tvLayoutUrl = reqBody.tvLayoutUrl || config.tvLayoutUrl || "https://www.tradingview.com/chart/3tR2ZDmS/";
+      const chartTheme = reqBody.chartTheme || config.chartTheme || "light";
 
       if (!webhookUrl) {
         return new Response(JSON.stringify({ error: "No Discord Webhook URL provided! Please enter it in the Control Panel input field." }), { status: 400 });
       }
 
-      // Save webhook & layout to state if passed
-      if (reqBody.discordWebhookUrl || reqBody.tvLayoutUrl) {
+      // Save webhook & theme to state if passed
+      if (reqBody.discordWebhookUrl || reqBody.chartTheme) {
         if (reqBody.discordWebhookUrl) config.discordWebhookUrl = reqBody.discordWebhookUrl;
-        if (reqBody.tvLayoutUrl) config.tvLayoutUrl = reqBody.tvLayoutUrl;
+        if (reqBody.chartTheme) config.chartTheme = reqBody.chartTheme;
         
         if (env.ALERT_KV) {
           await env.ALERT_KV.put("SETTINGS_CONFIG", JSON.stringify(config));
@@ -62,9 +62,9 @@ export default {
         const goldSym = SYMBOLS[2]; // XAUUSD Gold
         const realCandles = await fetchCandles(goldSym.ticker, "15m");
         const currentPrice = realCandles && realCandles.length > 0 ? realCandles[realCandles.length - 1].close : 2415.50;
-        const chartImgUrl = generateTradingViewChartUrl(goldSym.tvSymbol, "15m", tvLayoutUrl);
+        const chartImgUrl = generateTradingViewChartUrl(goldSym.tvSymbol, "15m", chartTheme);
 
-        await sendDiscordEmbed(webhookUrl, "🧪 Test Alert - Custom TradingView Chart Screenshot", goldSym, "15m", currentPrice, 350, chartImgUrl, tvLayoutUrl);
+        await sendDiscordEmbed(webhookUrl, "🧪 Test Alert - Light Theme TradingView Chart", goldSym, "15m", currentPrice, 350, chartImgUrl);
         return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
       } catch (e) {
         return new Response(JSON.stringify({ error: e.message }), { status: 500 });
@@ -100,17 +100,16 @@ async function getConfig(env) {
 
   const parseTf = (envVal, defaultArray) => envVal ? envVal.split(",").map(s => s.trim()) : defaultArray;
   const fallbackWebhook = env.DISCORD_WEBHOOK_URL || "";
-  const defaultLayout = "https://www.tradingview.com/chart/3tR2ZDmS/";
 
   if (custom) {
     if (!custom.discordWebhookUrl) custom.discordWebhookUrl = fallbackWebhook;
-    if (!custom.tvLayoutUrl) custom.tvLayoutUrl = defaultLayout;
+    if (!custom.chartTheme) custom.chartTheme = "light";
     return custom;
   }
 
   return {
     discordWebhookUrl: fallbackWebhook,
-    tvLayoutUrl: defaultLayout,
+    chartTheme: "light",
     MSS: { enabled: env.ENABLE_MSS !== "false", timeframes: parseTf(env.MSS_TIMEFRAMES, ["1h", "4h"]) },
     FVG: {
       enabled: env.ENABLE_FVG !== "false",
@@ -151,7 +150,7 @@ async function scanAll(env) {
         
         const timestamp = closedBar.timestamp;
         const currentPrice = closedBar.close;
-        const chartImgUrl = generateTradingViewChartUrl(sym.tvSymbol, tf, CONFIG.tvLayoutUrl);
+        const chartImgUrl = generateTradingViewChartUrl(sym.tvSymbol, tf, CONFIG.chartTheme || "light");
 
         // 1. FVG Creation & Tracking with Min Points Filter
         if (CONFIG.FVG?.enabled && CONFIG.FVG.timeframes.includes(tf)) {
@@ -170,7 +169,7 @@ async function scanAll(env) {
               const key = `${sym.ticker}_${tf}_BULL_FVG_${timestamp}`;
               if (!(await isAlreadyAlerted(env, key))) {
                 await markAsAlerted(env, key);
-                await sendDiscordEmbed(webhookUrl, "🟢 Bullish FVG Formed", sym, tf, currentPrice, gapPoints, chartImgUrl, CONFIG.tvLayoutUrl);
+                await sendDiscordEmbed(webhookUrl, "🟢 Bullish FVG Formed", sym, tf, currentPrice, gapPoints, chartImgUrl);
 
                 const fvgLevelKey = `${sym.ticker}_${tf}_BULL_FVG_LEVEL`;
                 activeFvgs.set(fvgLevelKey, { top: closedBar.low, bottom: barTwoBefore.high, timestamp, gapPoints });
@@ -187,7 +186,7 @@ async function scanAll(env) {
               const key = `${sym.ticker}_${tf}_BEAR_FVG_${timestamp}`;
               if (!(await isAlreadyAlerted(env, key))) {
                 await markAsAlerted(env, key);
-                await sendDiscordEmbed(webhookUrl, "🔴 Bearish FVG Formed", sym, tf, currentPrice, gapPoints, chartImgUrl, CONFIG.tvLayoutUrl);
+                await sendDiscordEmbed(webhookUrl, "🔴 Bearish FVG Formed", sym, tf, currentPrice, gapPoints, chartImgUrl);
 
                 const fvgLevelKey = `${sym.ticker}_${tf}_BEAR_FVG_LEVEL`;
                 activeFvgs.set(fvgLevelKey, { bottom: closedBar.high, top: barTwoBefore.low, timestamp, gapPoints });
@@ -205,7 +204,7 @@ async function scanAll(env) {
               const fillKey = `${sym.ticker}_${tf}_BULL_FVG_FILLED_${activeBullFvg.timestamp}`;
               if (!(await isAlreadyAlerted(env, fillKey))) {
                 await markAsAlerted(env, fillKey);
-                await sendDiscordEmbed(webhookUrl, "🎯 Bullish FVG Filled / Tapped", sym, tf, currentPrice, activeBullFvg.gapPoints, chartImgUrl, CONFIG.tvLayoutUrl);
+                await sendDiscordEmbed(webhookUrl, "🎯 Bullish FVG Filled / Tapped", sym, tf, currentPrice, activeBullFvg.gapPoints, chartImgUrl);
                 activeFvgs.delete(bullFvgKey);
               }
             }
@@ -218,7 +217,7 @@ async function scanAll(env) {
               const fillKey = `${sym.ticker}_${tf}_BEAR_FVG_FILLED_${activeBearFvg.timestamp}`;
               if (!(await isAlreadyAlerted(env, fillKey))) {
                 await markAsAlerted(env, fillKey);
-                await sendDiscordEmbed(webhookUrl, "🎯 Bearish FVG Filled / Tapped", sym, tf, currentPrice, activeBearFvg.gapPoints, chartImgUrl, CONFIG.tvLayoutUrl);
+                await sendDiscordEmbed(webhookUrl, "🎯 Bearish FVG Filled / Tapped", sym, tf, currentPrice, activeBearFvg.gapPoints, chartImgUrl);
                 activeFvgs.delete(bearFvgKey);
               }
             }
@@ -236,7 +235,7 @@ async function scanAll(env) {
             const key = `${sym.ticker}_${tf}_BULL_MSS_${timestamp}`;
             if (!(await isAlreadyAlerted(env, key))) {
               await markAsAlerted(env, key);
-              await sendDiscordEmbed(webhookUrl, "🟢 Bullish MSS Breakout", sym, tf, currentPrice, null, chartImgUrl, CONFIG.tvLayoutUrl);
+              await sendDiscordEmbed(webhookUrl, "🟢 Bullish MSS Breakout", sym, tf, currentPrice, null, chartImgUrl);
             }
           }
 
@@ -244,7 +243,7 @@ async function scanAll(env) {
             const key = `${sym.ticker}_${tf}_BEAR_MSS_${timestamp}`;
             if (!(await isAlreadyAlerted(env, key))) {
               await markAsAlerted(env, key);
-              await sendDiscordEmbed(webhookUrl, "🔴 Bearish MSS Breakdown", sym, tf, currentPrice, null, chartImgUrl, CONFIG.tvLayoutUrl);
+              await sendDiscordEmbed(webhookUrl, "🔴 Bearish MSS Breakdown", sym, tf, currentPrice, null, chartImgUrl);
             }
           }
         }
@@ -260,7 +259,7 @@ async function scanAll(env) {
             const key = `${sym.ticker}_${tf}_BSL_SWEEP_${timestamp}`;
             if (!(await isAlreadyAlerted(env, key))) {
               await markAsAlerted(env, key);
-              await sendDiscordEmbed(webhookUrl, "💥 Buyside Liquidity Swept", sym, tf, currentPrice, null, chartImgUrl, CONFIG.tvLayoutUrl);
+              await sendDiscordEmbed(webhookUrl, "💥 Buyside Liquidity Swept", sym, tf, currentPrice, null, chartImgUrl);
             }
           }
 
@@ -268,7 +267,7 @@ async function scanAll(env) {
             const key = `${sym.ticker}_${tf}_SSL_SWEEP_${timestamp}`;
             if (!(await isAlreadyAlerted(env, key))) {
               await markAsAlerted(env, key);
-              await sendDiscordEmbed(webhookUrl, "💥 Sellside Liquidity Swept", sym, tf, currentPrice, null, chartImgUrl, CONFIG.tvLayoutUrl);
+              await sendDiscordEmbed(webhookUrl, "💥 Sellside Liquidity Swept", sym, tf, currentPrice, null, chartImgUrl);
             }
           }
         }
@@ -334,24 +333,14 @@ async function fetchCandles(ticker, timeframe) {
   return candles;
 }
 
-function generateTradingViewChartUrl(tvSymbol, timeframe, customLayoutUrl = "") {
-  let targetUrl = "";
-  if (customLayoutUrl && customLayoutUrl.includes("/chart/")) {
-    const match = customLayoutUrl.match(/\/chart\/([a-zA-Z0-9]+)/);
-    const layoutId = match ? match[1] : "";
-    if (layoutId) {
-      targetUrl = `https://www.tradingview.com/chart/${layoutId}/?symbol=${encodeURIComponent(tvSymbol)}`;
-    }
-  }
-  if (!targetUrl) {
-    const tfMap = { "5m": "5", "15m": "15", "1h": "60", "4h": "240", "1d": "D" };
-    const interval = tfMap[timeframe] || "15";
-    targetUrl = `https://s.tradingview.com/widgetembed/?symbol=${encodeURIComponent(tvSymbol)}&interval=${interval}&theme=dark`;
-  }
-  return `https://api.microlink.io/?url=${encodeURIComponent(targetUrl)}&screenshot=true&embed=screenshot.url`;
+function generateTradingViewChartUrl(tvSymbol, timeframe, theme = "light") {
+  const tfMap = { "5m": "5", "15m": "15", "1h": "60", "4h": "240", "1d": "D" };
+  const interval = tfMap[timeframe] || "15";
+  const widgetUrl = `https://s.tradingview.com/widgetembed/?symbol=${encodeURIComponent(tvSymbol)}&interval=${interval}&theme=${theme}`;
+  return `https://api.microlink.io/?url=${encodeURIComponent(widgetUrl)}&screenshot=true&embed=screenshot.url`;
 }
 
-async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price, gapPoints = null, chartImgUrl = null, customLayoutUrl = "") {
+async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price, gapPoints = null, chartImgUrl = null) {
   const priceFormatted = price.toFixed(symbol.decimals || 4);
 
   const dhakaTime = new Date().toLocaleString("en-US", {
@@ -365,14 +354,7 @@ async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price
     hour12: true
   });
 
-  let tradingViewUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(symbol.tvSymbol)}`;
-  if (customLayoutUrl && customLayoutUrl.includes("/chart/")) {
-    const match = customLayoutUrl.match(/\/chart\/([a-zA-Z0-9]+)/);
-    const layoutId = match ? match[1] : "";
-    if (layoutId) {
-      tradingViewUrl = `https://www.tradingview.com/chart/${layoutId}/?symbol=${encodeURIComponent(symbol.tvSymbol)}`;
-    }
-  }
+  const tradingViewUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(symbol.tvSymbol)}`;
 
   let titleWithPoints = eventTitle;
   if (gapPoints !== null) {
@@ -411,7 +393,7 @@ function renderAdminHTML(settings) {
 
   const forexMinPoints = settings.FVG?.minPointsForex || { "5m": 50, "15m": 100, "1h": 200, "4h": 500, "1d": 1000 };
   const goldMinPoints = settings.FVG?.minPointsGold || { "5m": 100, "15m": 300, "1h": 500, "4h": 1000, "1d": 2000 };
-  const tvLayoutUrl = settings.tvLayoutUrl || "https://www.tradingview.com/chart/3tR2ZDmS/";
+  const chartTheme = settings.chartTheme || "light";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -439,6 +421,7 @@ function renderAdminHTML(settings) {
     .test-btn { width: 100%; background: #8b5cf6; color: white; border: none; padding: 12px; border-radius: 10px; font-size: 15px; font-weight: bold; cursor: pointer; margin-top: 10px; }
     .test-btn:hover { background: #7c3aed; }
     .webhook-input { width: 100%; box-sizing: border-box; margin-top: 8px; padding: 10px; background: #0f172a; border: 1px solid #475569; color: white; border-radius: 8px; font-size: 13px; }
+    .theme-select { width: 100%; box-sizing: border-box; margin-top: 8px; padding: 10px; background: #0f172a; border: 1px solid #475569; color: white; border-radius: 8px; font-size: 13px; }
     .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
     .switch input { opacity: 0; width: 0; height: 0; }
     .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #475569; transition: .3s; border-radius: 24px; }
@@ -459,12 +442,15 @@ function renderAdminHTML(settings) {
   </div>
 
   <div class="card">
-    <div class="title">🎨 Personal TradingView Layout Link</div>
-    <div class="sub-title">Paste your saved TradingView chart link (for custom theme & indicators):</div>
-    <input type="text" id="tvLayoutUrl" class="webhook-input" value="${tvLayoutUrl}" placeholder="https://www.tradingview.com/chart/3tR2ZDmS/">
+    <div class="title">🎨 Chart Theme Preference</div>
+    <div class="sub-title">Select White (Light Theme) or Dark Theme for alert screenshots:</div>
+    <select id="chartTheme" class="theme-select">
+      <option value="light" ${chartTheme === 'light' ? 'selected' : ''}>☀️ White Theme (Matching Your Chart)</option>
+      <option value="dark" ${chartTheme === 'dark' ? 'selected' : ''}>🌙 Dark Theme</option>
+    </select>
   </div>
 
-  <button type="button" class="test-btn" onclick="sendTestAlert()">🧪 Send Custom TradingView Screenshot Test Alert</button>
+  <button type="button" class="test-btn" onclick="sendTestAlert()">🧪 Send White Theme TradingView Screenshot Test Alert</button>
 
   <form id="configForm" style="margin-top: 15px;">
     ${patterns.map(pat => {
@@ -514,7 +500,7 @@ function renderAdminHTML(settings) {
   <script>
     const settings = ${JSON.stringify(settings)};
 
-    // Auto restore Webhook URL & TV Layout from localStorage
+    // Auto restore Webhook URL & Theme from localStorage
     window.addEventListener('DOMContentLoaded', () => {
       const savedLocalWebhook = localStorage.getItem('ict_discord_webhook_url');
       const webhookInput = document.getElementById('discordWebhookUrl');
@@ -523,11 +509,11 @@ function renderAdminHTML(settings) {
         settings.discordWebhookUrl = savedLocalWebhook;
       }
 
-      const savedTvLayout = localStorage.getItem('ict_tv_layout_url');
-      const layoutInput = document.getElementById('tvLayoutUrl');
-      if (savedTvLayout) {
-        layoutInput.value = savedTvLayout;
-        settings.tvLayoutUrl = savedTvLayout;
+      const savedTheme = localStorage.getItem('ict_chart_theme');
+      const themeInput = document.getElementById('chartTheme');
+      if (savedTheme) {
+        themeInput.value = savedTheme;
+        settings.chartTheme = savedTheme;
       }
     });
 
@@ -546,24 +532,24 @@ function renderAdminHTML(settings) {
 
     async function sendTestAlert() {
       const webhookVal = document.getElementById('discordWebhookUrl').value.trim();
-      const layoutVal = document.getElementById('tvLayoutUrl').value.trim();
+      const themeVal = document.getElementById('chartTheme').value;
       
       if (webhookVal) localStorage.setItem('ict_discord_webhook_url', webhookVal);
-      if (layoutVal) localStorage.setItem('ict_tv_layout_url', layoutVal);
+      if (themeVal) localStorage.setItem('ict_chart_theme', themeVal);
 
       const status = document.getElementById('status');
       status.style.color = '#38bdf8';
-      status.innerText = '⏳ Capturing your custom TradingView chart screenshot...';
+      status.innerText = '⏳ Capturing White Theme TradingView chart screenshot...';
       
       const res = await fetch('/api/test-alert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ discordWebhookUrl: webhookVal, tvLayoutUrl: layoutVal })
+        body: JSON.stringify({ discordWebhookUrl: webhookVal, chartTheme: themeVal })
       });
 
       if (res.ok) {
         status.style.color = '#10b981';
-        status.innerText = '✅ Custom TradingView Chart Screenshot Alert Sent!';
+        status.innerText = '✅ White Theme TradingView Chart Screenshot Alert Sent!';
       } else {
         const err = await res.json();
         status.style.color = '#ef4444';
@@ -575,13 +561,13 @@ function renderAdminHTML(settings) {
     document.getElementById('configForm').onsubmit = async (e) => {
       e.preventDefault();
       const webhookVal = document.getElementById('discordWebhookUrl').value.trim();
-      const layoutVal = document.getElementById('tvLayoutUrl').value.trim();
+      const themeVal = document.getElementById('chartTheme').value;
       
       settings.discordWebhookUrl = webhookVal;
-      settings.tvLayoutUrl = layoutVal;
+      settings.chartTheme = themeVal;
 
       if (webhookVal) localStorage.setItem('ict_discord_webhook_url', webhookVal);
-      if (layoutVal) localStorage.setItem('ict_tv_layout_url', layoutVal);
+      if (themeVal) localStorage.setItem('ict_chart_theme', themeVal);
 
       ['FVG', 'FVGFill', 'MSS', 'OB', 'Liquidity'].forEach(pat => {
         if (!settings[pat]) settings[pat] = { enabled: true, timeframes: [] };
@@ -608,7 +594,7 @@ function renderAdminHTML(settings) {
       const status = document.getElementById('status');
       if (res.ok) {
         status.style.color = '#10b981';
-        status.innerText = '✅ Settings & Custom Layout Saved Instantly!';
+        status.innerText = '✅ Settings & White Theme Saved Instantly!';
       } else {
         status.style.color = '#ef4444';
         status.innerText = '❌ Error saving settings!';
