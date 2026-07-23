@@ -1,4 +1,4 @@
-// 24/7 Cloudflare Worker ICT Discord Alert Bot with REAL TradingView Chart Screenshots
+// 24/7 Cloudflare Worker ICT Discord Alert Bot with Permanent Webhook Storage & Real TV Screenshots
 // Runs every 1 minute for free on Cloudflare Workers
 
 const SYMBOLS = [
@@ -33,13 +33,28 @@ export default {
       }
     }
 
-    // Send Test Alert API using REAL TradingView Screenshot & Live Market Price
+    // Send Test Alert API
     if (url.pathname === "/api/test-alert" && request.method === "POST") {
+      let reqBody = {};
+      try { reqBody = await request.json(); } catch(e) {}
+      
       const config = await getConfig(env);
-      const webhookUrl = config.discordWebhookUrl || env.DISCORD_WEBHOOK_URL;
+      const webhookUrl = reqBody.discordWebhookUrl || config.discordWebhookUrl || env.DISCORD_WEBHOOK_URL;
+      
       if (!webhookUrl) {
-        return new Response(JSON.stringify({ error: "No Discord Webhook URL provided! Please enter it in the Control Panel." }), { status: 400 });
+        return new Response(JSON.stringify({ error: "No Discord Webhook URL provided! Please enter it in the Control Panel input field." }), { status: 400 });
       }
+
+      // Save webhook to state if passed
+      if (reqBody.discordWebhookUrl) {
+        config.discordWebhookUrl = reqBody.discordWebhookUrl;
+        if (env.ALERT_KV) {
+          await env.ALERT_KV.put("SETTINGS_CONFIG", JSON.stringify(config));
+        } else {
+          globalThis.USER_SETTINGS = config;
+        }
+      }
+
       try {
         const goldSym = SYMBOLS[2]; // XAUUSD Gold
         const realCandles = await fetchCandles(goldSym.ticker, "15m");
@@ -469,6 +484,16 @@ function renderAdminHTML(settings) {
   <script>
     const settings = ${JSON.stringify(settings)};
 
+    // Auto restore Webhook URL from localStorage if input field is empty
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedLocalWebhook = localStorage.getItem('ict_discord_webhook_url');
+      const webhookInput = document.getElementById('discordWebhookUrl');
+      if (!webhookInput.value && savedLocalWebhook) {
+        webhookInput.value = savedLocalWebhook;
+        settings.discordWebhookUrl = savedLocalWebhook;
+      }
+    });
+
     function toggleTf(pattern, tf, btn) {
       if (!settings[pattern]) settings[pattern] = { enabled: true, timeframes: [] };
       if (!settings[pattern].timeframes) settings[pattern].timeframes = [];
@@ -483,10 +508,19 @@ function renderAdminHTML(settings) {
     }
 
     async function sendTestAlert() {
+      const webhookVal = document.getElementById('discordWebhookUrl').value.trim();
+      if (webhookVal) localStorage.setItem('ict_discord_webhook_url', webhookVal);
+
       const status = document.getElementById('status');
       status.style.color = '#38bdf8';
       status.innerText = '⏳ Capturing real TradingView chart screenshot...';
-      const res = await fetch('/api/test-alert', { method: 'POST' });
+      
+      const res = await fetch('/api/test-alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ discordWebhookUrl: webhookVal })
+      });
+
       if (res.ok) {
         status.style.color = '#10b981';
         status.innerText = '✅ Real TradingView Chart Screenshot Alert Sent!';
@@ -500,7 +534,9 @@ function renderAdminHTML(settings) {
 
     document.getElementById('configForm').onsubmit = async (e) => {
       e.preventDefault();
-      settings.discordWebhookUrl = document.getElementById('discordWebhookUrl').value.trim();
+      const webhookVal = document.getElementById('discordWebhookUrl').value.trim();
+      settings.discordWebhookUrl = webhookVal;
+      if (webhookVal) localStorage.setItem('ict_discord_webhook_url', webhookVal);
 
       ['FVG', 'FVGFill', 'MSS', 'OB', 'Liquidity'].forEach(pat => {
         if (!settings[pat]) settings[pat] = { enabled: true, timeframes: [] };
