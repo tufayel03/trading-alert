@@ -1,6 +1,8 @@
 // 24/7 Cloudflare Worker ICT Discord Alert Bot with High-Res Light/Dark TradingView Screenshots
 // Runs every 1 minute for free on Cloudflare Workers
 
+const DEFAULT_WEBHOOK = "https://discord.com/api/webhooks/1529895992118214706/72e329IvsoaXVMr3zIRf5dQVXaYc3dwE3";
+
 const SYMBOLS = [
   { name: "EURUSD", ticker: "EURUSD=X", tvSymbol: "FX:EURUSD", decimals: 5 },
   { name: "GBPUSD", ticker: "GBPUSD=X", tvSymbol: "FX:GBPUSD", decimals: 5 },
@@ -39,7 +41,7 @@ export default {
       try { reqBody = await request.json(); } catch(e) {}
       
       const config = await getConfig(env);
-      const webhookUrl = reqBody.discordWebhookUrl || config.discordWebhookUrl || env.DISCORD_WEBHOOK_URL;
+      const webhookUrl = reqBody.discordWebhookUrl || config.discordWebhookUrl || env.DISCORD_WEBHOOK_URL || DEFAULT_WEBHOOK;
       const chartTheme = reqBody.chartTheme || config.chartTheme || "light";
 
       if (!webhookUrl) {
@@ -64,7 +66,7 @@ export default {
         const currentPrice = realCandles && realCandles.length > 0 ? realCandles[realCandles.length - 1].close : 2415.50;
         const chartImgUrl = generateTradingViewChartUrl(goldSym.tvSymbol, "15m", chartTheme);
 
-        await sendDiscordEmbed(webhookUrl, "🧪 Test Alert - Light Theme TradingView Chart", goldSym, "15m", currentPrice, 350, chartImgUrl);
+        await sendDiscordEmbed(webhookUrl, "🧪 Test Alert - TUF Capital TradingView Chart", goldSym, "15m", currentPrice, 350, chartImgUrl);
         return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
       } catch (e) {
         return new Response(JSON.stringify({ error: e.message }), { status: 500 });
@@ -75,7 +77,7 @@ export default {
     if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/admin")) {
       const settings = await getConfig(env);
       return new Response(renderAdminHTML(settings), {
-        headers: { "Content-Type": "text/html; charset=utf-8" }
+        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache, no-store, must-revalidate" }
       });
     }
 
@@ -99,7 +101,7 @@ async function getConfig(env) {
   }
 
   const parseTf = (envVal, defaultArray) => envVal ? envVal.split(",").map(s => s.trim()) : defaultArray;
-  const fallbackWebhook = env.DISCORD_WEBHOOK_URL || "";
+  const fallbackWebhook = env.DISCORD_WEBHOOK_URL || DEFAULT_WEBHOOK;
 
   if (custom) {
     if (!custom.discordWebhookUrl) custom.discordWebhookUrl = fallbackWebhook;
@@ -125,7 +127,7 @@ async function getConfig(env) {
 
 async function scanAll(env) {
   const CONFIG = await getConfig(env);
-  const webhookUrl = CONFIG.discordWebhookUrl || env.DISCORD_WEBHOOK_URL;
+  const webhookUrl = CONFIG.discordWebhookUrl || env.DISCORD_WEBHOOK_URL || DEFAULT_WEBHOOK;
   if (!webhookUrl) return;
 
   for (const sym of SYMBOLS) {
@@ -438,7 +440,7 @@ function renderAdminHTML(settings) {
   <div class="card">
     <div class="title">🔗 Discord Webhook URL</div>
     <div class="sub-title">Paste your Discord channel webhook URL below:</div>
-    <input type="text" id="discordWebhookUrl" class="webhook-input" value="${settings.discordWebhookUrl || ''}" placeholder="https://discord.com/api/webhooks/...">
+    <input type="text" id="discordWebhookUrl" class="webhook-input" value="${settings.discordWebhookUrl || DEFAULT_WEBHOOK}" placeholder="https://discord.com/api/webhooks/...">
   </div>
 
   <div class="card">
@@ -499,14 +501,18 @@ function renderAdminHTML(settings) {
 
   <script>
     const settings = ${JSON.stringify(settings)};
+    const defaultWebhook = "${DEFAULT_WEBHOOK}";
 
     // Auto restore Webhook URL & Theme from localStorage
     window.addEventListener('DOMContentLoaded', () => {
       const savedLocalWebhook = localStorage.getItem('ict_discord_webhook_url');
       const webhookInput = document.getElementById('discordWebhookUrl');
-      if (!webhookInput.value && savedLocalWebhook) {
+      if (savedLocalWebhook) {
         webhookInput.value = savedLocalWebhook;
         settings.discordWebhookUrl = savedLocalWebhook;
+      } else if (!webhookInput.value) {
+        webhookInput.value = defaultWebhook;
+        settings.discordWebhookUrl = defaultWebhook;
       }
 
       const savedTheme = localStorage.getItem('ict_chart_theme');
@@ -531,43 +537,52 @@ function renderAdminHTML(settings) {
     }
 
     async function sendTestAlert() {
-      const webhookVal = document.getElementById('discordWebhookUrl').value.trim();
+      let webhookVal = document.getElementById('discordWebhookUrl').value.trim();
+      if (!webhookVal) webhookVal = defaultWebhook;
+
       const themeVal = document.getElementById('chartTheme').value;
       
-      if (webhookVal) localStorage.setItem('ict_discord_webhook_url', webhookVal);
-      if (themeVal) localStorage.setItem('ict_chart_theme', themeVal);
+      localStorage.setItem('ict_discord_webhook_url', webhookVal);
+      localStorage.setItem('ict_chart_theme', themeVal);
 
       const status = document.getElementById('status');
       status.style.color = '#38bdf8';
-      status.innerText = '⏳ Capturing TUF Capital TradingView chart screenshot...';
+      status.innerText = '⏳ Sending TUF Capital Test Alert to Discord...';
       
-      const res = await fetch('/api/test-alert', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ discordWebhookUrl: webhookVal, chartTheme: themeVal })
-      });
+      try {
+        const res = await fetch('/api/test-alert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ discordWebhookUrl: webhookVal, chartTheme: themeVal })
+        });
 
-      if (res.ok) {
-        status.style.color = '#10b981';
-        status.innerText = '✅ TUF Capital Chart Screenshot Alert Sent!';
-      } else {
-        const err = await res.json();
+        if (res.ok) {
+          status.style.color = '#10b981';
+          status.innerText = '✅ TUF Capital Alert Sent to Discord!';
+        } else {
+          const err = await res.json();
+          status.style.color = '#ef4444';
+          status.innerText = '❌ Failed: ' + (err.error || 'Check Discord Webhook URL');
+        }
+      } catch (err) {
         status.style.color = '#ef4444';
-        status.innerText = '❌ Failed: ' + (err.error || 'Check Discord Webhook URL');
+        status.innerText = '❌ Network Error: ' + err.message;
       }
-      setTimeout(() => status.innerText = '', 4000);
+      setTimeout(() => status.innerText = '', 5000);
     }
 
     document.getElementById('configForm').onsubmit = async (e) => {
       e.preventDefault();
-      const webhookVal = document.getElementById('discordWebhookUrl').value.trim();
+      let webhookVal = document.getElementById('discordWebhookUrl').value.trim();
+      if (!webhookVal) webhookVal = defaultWebhook;
+
       const themeVal = document.getElementById('chartTheme').value;
       
       settings.discordWebhookUrl = webhookVal;
       settings.chartTheme = themeVal;
 
-      if (webhookVal) localStorage.setItem('ict_discord_webhook_url', webhookVal);
-      if (themeVal) localStorage.setItem('ict_chart_theme', themeVal);
+      localStorage.setItem('ict_discord_webhook_url', webhookVal);
+      localStorage.setItem('ict_chart_theme', themeVal);
 
       ['FVG', 'FVGFill', 'MSS', 'OB', 'Liquidity'].forEach(pat => {
         if (!settings[pat]) settings[pat] = { enabled: true, timeframes: [] };
