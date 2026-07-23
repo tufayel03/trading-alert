@@ -1,4 +1,4 @@
-// 24/7 Cloudflare Worker ICT Discord Alert Bot with High-Res Light/Dark TradingView Screenshots
+// 24/7 Cloudflare Worker ICT Discord Alert Bot with BOS, FVG, MSS, OB, and Liquidity Detection
 // Runs every 1 minute for free on Cloudflare Workers
 
 const DEFAULT_WEBHOOK = "https://discord.com/api/webhooks/1529895992118214706/72e329IvsoaXVMr3zIRf5dQVXaYc3dwE3";
@@ -35,7 +35,7 @@ export default {
       }
     }
 
-    // Direct Webhook Endpoint for TradingView Native Alerts (Captures live chart screen with Pine Script indicator!)
+    // Direct Webhook Endpoint for TradingView Native Alerts
     if (url.pathname === "/api/webhook" && request.method === "POST") {
       try {
         const body = await request.json();
@@ -80,7 +80,7 @@ export default {
         const currentPrice = realCandles && realCandles.length > 0 ? realCandles[realCandles.length - 1].close : 4047.50;
         const chartImgUrl = generateTradingViewChartUrl(goldSym.tvSymbol, "15m", chartTheme);
 
-        await sendDiscordEmbed(webhookUrl, "🧪 Test Alert - TUF Capital Clean Chart (No Volume)", goldSym, "15m", currentPrice, 350, chartImgUrl);
+        await sendDiscordEmbed(webhookUrl, "🟢 Bullish BOS (Break of Structure)", goldSym, "15m", currentPrice, null, chartImgUrl);
         return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
       } catch (e) {
         return new Response(JSON.stringify({ error: e.message }), { status: 500 });
@@ -120,12 +120,14 @@ async function getConfig(env) {
   if (custom) {
     if (!custom.discordWebhookUrl) custom.discordWebhookUrl = fallbackWebhook;
     if (!custom.chartTheme) custom.chartTheme = "light";
+    if (!custom.BOS) custom.BOS = { enabled: true, timeframes: ["15m", "1h", "4h"] };
     return custom;
   }
 
   return {
     discordWebhookUrl: fallbackWebhook,
     chartTheme: "light",
+    BOS: { enabled: true, timeframes: ["15m", "1h", "4h"] },
     MSS: { enabled: env.ENABLE_MSS !== "false", timeframes: parseTf(env.MSS_TIMEFRAMES, ["1h", "4h"]) },
     FVG: {
       enabled: env.ENABLE_FVG !== "false",
@@ -146,7 +148,7 @@ async function scanAll(env) {
 
   for (const sym of SYMBOLS) {
     const timeframes = new Set();
-    ["MSS", "FVG", "FVGFill", "OB", "Liquidity"].forEach(pattern => {
+    ["BOS", "MSS", "FVG", "FVGFill", "OB", "Liquidity"].forEach(pattern => {
       if (CONFIG[pattern] && CONFIG[pattern].enabled) {
         (CONFIG[pattern].timeframes || []).forEach(tf => timeframes.add(tf));
       }
@@ -240,7 +242,31 @@ async function scanAll(env) {
           }
         }
 
-        // 3. MSS Detection
+        // 3. BOS (Break of Structure) Detection
+        if (CONFIG.BOS?.enabled && CONFIG.BOS.timeframes.includes(tf)) {
+          const recentHighs = candles.slice(-10, -2).map(c => c.high);
+          const recentLows = candles.slice(-10, -2).map(c => c.low);
+          const swingHigh = Math.max(...recentHighs);
+          const swingLow = Math.min(...recentLows);
+
+          if (closedBar.close > swingHigh && barBefore.close <= swingHigh) {
+            const key = `${sym.ticker}_${tf}_BULL_BOS_${timestamp}`;
+            if (!(await isAlreadyAlerted(env, key))) {
+              await markAsAlerted(env, key);
+              await sendDiscordEmbed(webhookUrl, "🟢 Bullish BOS (Break of Structure)", sym, tf, currentPrice, null, chartImgUrl);
+            }
+          }
+
+          if (closedBar.close < swingLow && barBefore.close >= swingLow) {
+            const key = `${sym.ticker}_${tf}_BEAR_BOS_${timestamp}`;
+            if (!(await isAlreadyAlerted(env, key))) {
+              await markAsAlerted(env, key);
+              await sendDiscordEmbed(webhookUrl, "🔴 Bearish BOS (Break of Structure)", sym, tf, currentPrice, null, chartImgUrl);
+            }
+          }
+        }
+
+        // 4. MSS Detection
         if (CONFIG.MSS?.enabled && CONFIG.MSS.timeframes.includes(tf)) {
           const recentHighs = candles.slice(-12, -3).map(c => c.high);
           const recentLows = candles.slice(-12, -3).map(c => c.low);
@@ -264,7 +290,7 @@ async function scanAll(env) {
           }
         }
 
-        // 4. Liquidity Sweep Detection
+        // 5. Liquidity Sweep Detection
         if (CONFIG.Liquidity?.enabled && CONFIG.Liquidity.timeframes.includes(tf)) {
           const recentHighs = candles.slice(-15, -3).map(c => c.high);
           const recentLows = candles.slice(-15, -3).map(c => c.low);
@@ -352,7 +378,6 @@ async function fetchCandles(ticker, timeframe) {
 function generateTradingViewChartUrl(tvSymbol, timeframe, theme = "light") {
   const tfMap = { "5m": "5", "15m": "15", "1h": "60", "4h": "240", "1d": "D" };
   const interval = tfMap[timeframe] || "15";
-  // hide_volume=true removes volume bars from the bottom of the chart
   const widgetUrl = `https://s.tradingview.com/widgetembed/?symbol=${encodeURIComponent(tvSymbol)}&interval=${interval}&theme=${theme}&hide_volume=true`;
   return `https://api.microlink.io/?url=${encodeURIComponent(widgetUrl)}&screenshot=true&embed=screenshot.url`;
 }
@@ -404,8 +429,8 @@ async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price
 }
 
 function renderAdminHTML(settings) {
-  const patterns = ["FVG", "FVGFill", "MSS", "OB", "Liquidity"];
-  const labels = { FVG: "FVG Formed", FVGFill: "FVG Filled / Mitigated", MSS: "MSS Shift", OB: "Order Block", Liquidity: "Liquidity Sweep" };
+  const patterns = ["BOS", "MSS", "FVG", "FVGFill", "OB", "Liquidity"];
+  const labels = { BOS: "BOS (Break of Structure)", MSS: "MSS Shift", FVG: "FVG Formed", FVGFill: "FVG Filled / Mitigated", OB: "Order Block", Liquidity: "Liquidity Sweep" };
   const allTfs = ["5m", "15m", "1h", "4h", "1d"];
 
   const forexMinPoints = settings.FVG?.minPointsForex || { "5m": 50, "15m": 100, "1h": 200, "4h": 500, "1d": 1000 };
@@ -467,7 +492,7 @@ function renderAdminHTML(settings) {
     </select>
   </div>
 
-  <button type="button" class="test-btn" onclick="sendTestAlert()">🧪 Send TUF Capital Test Alert (Clean Chart)</button>
+  <button type="button" class="test-btn" onclick="sendTestAlert()">🧪 Send TUF Capital Test Alert (BOS)</button>
 
   <form id="configForm" style="margin-top: 15px;">
     ${patterns.map(pat => {
@@ -561,7 +586,7 @@ function renderAdminHTML(settings) {
 
       const status = document.getElementById('status');
       status.style.color = '#38bdf8';
-      status.innerText = '⏳ Sending TUF Capital Test Alert to Discord...';
+      status.innerText = '⏳ Sending TUF Capital BOS Test Alert to Discord...';
       
       try {
         const res = await fetch('/api/test-alert', {
@@ -572,7 +597,7 @@ function renderAdminHTML(settings) {
 
         if (res.ok) {
           status.style.color = '#10b981';
-          status.innerText = '✅ TUF Capital Alert Sent to Discord!';
+          status.innerText = '✅ TUF Capital BOS Alert Sent to Discord!';
         } else {
           const err = await res.json();
           status.style.color = '#ef4444';
@@ -598,7 +623,7 @@ function renderAdminHTML(settings) {
       localStorage.setItem('ict_discord_webhook_url', webhookVal);
       localStorage.setItem('ict_chart_theme', themeVal);
 
-      ['FVG', 'FVGFill', 'MSS', 'OB', 'Liquidity'].forEach(pat => {
+      ['BOS', 'MSS', 'FVG', 'FVGFill', 'OB', 'Liquidity'].forEach(pat => {
         if (!settings[pat]) settings[pat] = { enabled: true, timeframes: [] };
         settings[pat].enabled = document.getElementById(pat + '_enabled').checked;
       });
