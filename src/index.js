@@ -1,4 +1,4 @@
-// 24/7 Cloudflare Worker ICT Discord Alert Bot with Separate Forex & Gold FVG Min Points GUI Controls
+// 24/7 Cloudflare Worker ICT Discord Alert Bot with Test Alert Button & FVG Points in Embed Title
 // Runs every 1 minute for free on Cloudflare Workers
 
 const SYMBOLS = [
@@ -18,6 +18,7 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
+    // Save Settings API
     if (url.pathname === "/api/settings" && request.method === "POST") {
       try {
         const body = await request.json();
@@ -32,6 +33,21 @@ export default {
       }
     }
 
+    // Send Test Alert API
+    if (url.pathname === "/api/test-alert" && request.method === "POST") {
+      const webhookUrl = env.DISCORD_WEBHOOK_URL;
+      if (!webhookUrl) {
+        return new Response(JSON.stringify({ error: "No DISCORD_WEBHOOK_URL configured in Cloudflare environment!" }), { status: 400 });
+      }
+      try {
+        await sendDiscordEmbed(webhookUrl, "🧪 Test Alert - ICT Scanner Working!", SYMBOLS[2], "15m", 2415.50, 500);
+        return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), { status: 500 });
+      }
+    }
+
+    // Serve GUI Admin Page
     if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/admin")) {
       const settings = await getConfig(env);
       return new Response(renderAdminHTML(settings), {
@@ -39,6 +55,7 @@ export default {
       });
     }
 
+    // Manual Scan Trigger
     if (url.pathname === "/scan") {
       await scanAll(env);
       return new Response("Scan triggered manually!", { status: 200 });
@@ -104,7 +121,7 @@ async function scanAll(env) {
         const timestamp = closedBar.timestamp;
         const currentPrice = closedBar.close;
 
-        // 1. FVG Creation & Tracking with Separate Forex vs Gold Min Points
+        // 1. FVG Creation & Tracking with Min Points Filter
         if (CONFIG.FVG?.enabled && CONFIG.FVG.timeframes.includes(tf)) {
           const reqMinPoints = Number(
             isGold
@@ -147,7 +164,7 @@ async function scanAll(env) {
           }
         }
 
-        // 2. FVG Fill / Mitigation Detection
+        // 2. FVG Fill Detection
         if (CONFIG.FVGFill?.enabled && CONFIG.FVGFill.timeframes.includes(tf)) {
           const bullFvgKey = `${sym.ticker}_${tf}_BULL_FVG_LEVEL`;
           const activeBullFvg = activeFvgs.get(bullFvgKey);
@@ -302,6 +319,11 @@ async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price
   const chartImgUrl = `https://api.chart-img.com/v1/tradingview/advanced-chart?symbol=${encodeURIComponent(symbol.tvSymbol)}&interval=${timeframe}&theme=dark`;
   const tradingViewUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(symbol.tvSymbol)}`;
 
+  let titleWithPoints = eventTitle;
+  if (gapPoints !== null) {
+    titleWithPoints += ` (${gapPoints} Pts)`;
+  }
+
   let desc = `**Symbol:** \`${symbol.name}\`\n**Timeframe:** \`${timeframe}\`\n**Current Price:** \`${priceFormatted}\``;
   if (gapPoints !== null) {
     const pips = (gapPoints / 10).toFixed(1);
@@ -310,7 +332,7 @@ async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price
   desc += `\n**Time (Dhaka):** \`${dhakaTime}\`\n\n📈 [Open Live Chart on TradingView](${tradingViewUrl})`;
 
   const embed = {
-    title: `🚨 ${eventTitle}`,
+    title: `🚨 ${titleWithPoints}`,
     description: desc,
     color: eventTitle.includes("Bullish") || eventTitle.includes("Taken") ? 0x00E6A1 : 0xE60400,
     image: { url: chartImgUrl },
@@ -352,8 +374,10 @@ function renderAdminHTML(settings) {
     .min-points-item { display: flex; flex-direction: column; gap: 4px; }
     .min-points-item label { font-size: 11px; font-weight: bold; color: #38bdf8; }
     .min-points-item input { background: #1e293b; border: 1px solid #475569; color: white; padding: 6px; border-radius: 6px; font-weight: bold; text-align: center; }
-    .save-btn { width: 100%; background: #10b981; color: white; border: none; padding: 14px; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 20px; }
+    .save-btn { width: 100%; background: #10b981; color: white; border: none; padding: 14px; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 15px; }
     .save-btn:hover { background: #059669; }
+    .test-btn { width: 100%; background: #8b5cf6; color: white; border: none; padding: 12px; border-radius: 10px; font-size: 15px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+    .test-btn:hover { background: #7c3aed; }
     .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
     .switch input { opacity: 0; width: 0; height: 0; }
     .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #475569; transition: .3s; border-radius: 24px; }
@@ -366,7 +390,10 @@ function renderAdminHTML(settings) {
 <body>
   <h1>🎛️ ICT Alert Control Panel</h1>
   <div id="status"></div>
-  <form id="configForm">
+  
+  <button type="button" class="test-btn" onclick="sendTestAlert()">🧪 Send Test Alert to Discord</button>
+
+  <form id="configForm" style="margin-top: 15px;">
     ${patterns.map(pat => {
       const pData = settings[pat] || { enabled: true, timeframes: [] };
       return `
@@ -425,6 +452,22 @@ function renderAdminHTML(settings) {
         settings[pattern].timeframes.push(tf);
         btn.classList.add('active');
       }
+    }
+
+    async function sendTestAlert() {
+      const status = document.getElementById('status');
+      status.style.color = '#38bdf8';
+      status.innerText = '⏳ Sending test alert to Discord...';
+      const res = await fetch('/api/test-alert', { method: 'POST' });
+      if (res.ok) {
+        status.style.color = '#10b981';
+        status.innerText = '✅ Test Alert Sent Successfully to Discord!';
+      } else {
+        const err = await res.json();
+        status.style.color = '#ef4444';
+        status.innerText = '❌ Failed: ' + (err.error || 'Check Discord Webhook URL in Cloudflare Variables');
+      }
+      setTimeout(() => status.innerText = '', 4000);
     }
 
     document.getElementById('configForm').onsubmit = async (e) => {
