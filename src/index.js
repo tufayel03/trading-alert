@@ -1,4 +1,4 @@
-// 24/7 Cloudflare Worker ICT Discord Alert Bot with Responsive 2-Column Desktop Grid
+// 24/7 Cloudflare Worker ICT Discord Alert Bot with Premium TUF Capital Dashboard UI
 // Runs every 1 minute for free on Cloudflare Workers
 
 const DEFAULT_WEBHOOK = "https://discord.com/api/webhooks/1529895992118214706/72e329IvsoaXVMr3zIRf5dQVXaYc3dwE3";
@@ -429,10 +429,16 @@ async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price
 }
 
 function renderAdminHTML(settings) {
-  const patterns = ["BOS", "MSS", "FVG", "FVGFill", "OB", "Liquidity"];
-  const labels = { BOS: "BOS (Break of Structure)", MSS: "MSS Shift", FVG: "FVG Formed", FVGFill: "FVG Filled / Mitigated", OB: "Order Block", Liquidity: "Liquidity Sweep" };
+  const patterns = [
+    { key: "BOS", name: "BOS (Break of Structure)", desc: "Market structure trend continuation breaks" },
+    { key: "MSS", name: "MSS (Market Structure Shift)", desc: "Major market trend reversal shifts" },
+    { key: "FVG", name: "FVG (Fair Value Gap)", desc: "Imbalance formation with point filters" },
+    { key: "FVGFill", name: "FVG Fill / Mitigation", desc: "Price entry into created imbalance zones" },
+    { key: "OB", name: "Order Block (OB)", desc: "High probability institutional entry blocks" },
+    { key: "Liquidity", name: "Liquidity Sweeps", desc: "Buyside & Sellside liquidity pool sweeps" }
+  ];
+  
   const allTfs = ["5m", "15m", "1h", "4h", "1d"];
-
   const forexMinPoints = settings.FVG?.minPointsForex || { "5m": 50, "15m": 100, "1h": 200, "4h": 500, "1d": 1000 };
   const goldMinPoints = settings.FVG?.minPointsGold || { "5m": 100, "15m": 300, "1h": 500, "4h": 1000, "1d": 2000 };
   const chartTheme = settings.chartTheme || "light";
@@ -442,118 +448,493 @@ function renderAdminHTML(settings) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TUF Capital ICT Control Panel</title>
+  <title>TUF Capital — ICT Market Scanner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    * { box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b1329; color: #f8fafc; padding: 24px; margin: 0; }
-    .container { max-width: 1350px; margin: auto; }
-    h1 { color: #38bdf8; font-size: 26px; margin-bottom: 20px; text-align: center; font-weight: 800; letter-spacing: -0.5px; }
-    
-    .top-bar { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 16px; margin-bottom: 20px; }
-    @media (max-width: 900px) { .top-bar { grid-template-columns: 1fr; } }
+    :root {
+      --bg: #07090e;
+      --card-bg: #0e131f;
+      --card-border: rgba(255, 255, 255, 0.07);
+      --card-hover: rgba(255, 255, 255, 0.11);
+      --accent-blue: #0284c7;
+      --accent-cyan: #38bdf8;
+      --accent-green: #10b981;
+      --accent-purple: #6366f1;
+      --text-main: #f8fafc;
+      --text-muted: #64748b;
+      --text-sub: #94a3b8;
+    }
 
-    .grid-container { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
-    @media (max-width: 850px) { .grid-container { grid-template-columns: 1fr; } }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; }
 
-    .card { background: #1e293b; border-radius: 14px; padding: 18px 22px; border: 1px solid #334155; box-shadow: 0 4px 14px rgba(0,0,0,0.35); height: 100%; display: flex; flex-direction: column; justify-content: space-between; }
-    .header { display: flex; justify-content: space-between; align-items: center; }
-    .title { font-weight: 700; font-size: 16px; color: #f1f5f9; }
-    .sub-title { font-size: 11px; color: #94a3b8; margin-top: 3px; }
-    .section-label { font-size: 12px; font-weight: 700; color: #fbbf24; margin-top: 14px; margin-bottom: 4px; }
-    
-    .tf-group { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
-    .btn { background: #0f172a; border: 1px solid #334155; color: #94a3b8; padding: 7px 13px; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 13px; transition: all 0.2s; }
-    .btn.active { background: #0284c7; color: #ffffff; border-color: #38bdf8; box-shadow: 0 0 10px rgba(56, 189, 248, 0.3); }
+    body {
+      background-color: var(--bg);
+      background-image: 
+        radial-gradient(at 15% 15%, rgba(14, 165, 233, 0.08) 0px, transparent 50%),
+        radial-gradient(at 85% 85%, rgba(99, 102, 241, 0.08) 0px, transparent 50%);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding-bottom: 60px;
+    }
 
-    .min-points-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 6px; background: #0f172a; padding: 10px; border-radius: 8px; }
-    .min-points-item { display: flex; flex-direction: column; gap: 2px; }
-    .min-points-item label { font-size: 10px; font-weight: bold; color: #38bdf8; text-align: center; }
-    .min-points-item input { background: #1e293b; border: 1px solid #475569; color: white; padding: 5px 2px; border-radius: 6px; font-weight: bold; text-align: center; font-size: 12px; width: 100%; }
+    /* Navbar */
+    .navbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 18px 40px;
+      background: rgba(14, 19, 31, 0.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--card-border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
 
-    .save-btn { width: 100%; background: #10b981; color: white; border: none; padding: 16px; border-radius: 12px; font-size: 17px; font-weight: 800; cursor: pointer; margin-top: 20px; box-shadow: 0 4px 16px rgba(16, 185, 129, 0.4); transition: background 0.2s; }
-    .save-btn:hover { background: #059669; }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
 
-    .test-btn { height: 100%; background: #8b5cf6; color: white; border: none; padding: 12px; border-radius: 12px; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(139, 92, 246, 0.35); }
-    .test-btn:hover { background: #7c3aed; }
+    .brand-logo {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #0284c7, #6366f1);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 18px;
+      color: #fff;
+      box-shadow: 0 0 15px rgba(2, 132, 199, 0.4);
+    }
 
-    .webhook-input, .theme-select { width: 100%; margin-top: 6px; padding: 9px 12px; background: #0f172a; border: 1px solid #334155; color: white; border-radius: 8px; font-size: 13px; font-weight: 500; }
+    .brand-title {
+      font-weight: 800;
+      font-size: 18px;
+      letter-spacing: -0.4px;
+      color: #fff;
+    }
 
-    .switch { position: relative; display: inline-block; width: 42px; height: 22px; }
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      color: var(--accent-green);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .pulse {
+      width: 8px;
+      height: 8px;
+      background-color: var(--accent-green);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--accent-green);
+      animation: pulseAnim 2s infinite;
+    }
+
+    @keyframes pulseAnim {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.2); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    /* Layout Container */
+    .container {
+      max-width: 1400px;
+      margin: 30px auto 0;
+      padding: 0 30px;
+    }
+
+    #status-banner {
+      margin-bottom: 20px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 14px;
+      text-align: center;
+      transition: all 0.3s;
+    }
+
+    /* Global Settings Hero Bar */
+    .hero-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 28px;
+      display: grid;
+      grid-template-columns: 2fr 1fr 1.2fr;
+      gap: 20px;
+      align-items: end;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    @media (max-width: 950px) {
+      .hero-card { grid-template-columns: 1fr; }
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .form-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-sub);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .input-field, .select-field {
+      width: 100%;
+      background: #070a12;
+      border: 1px solid var(--card-border);
+      color: #fff;
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .input-field:focus, .select-field:focus {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+    }
+
+    .test-btn {
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      color: #fff;
+      border: none;
+      padding: 13px 20px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .test-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45);
+    }
+
+    /* Pattern Cards Grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 22px;
+    }
+
+    @media (max-width: 1150px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 750px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      position: relative;
+    }
+
+    .card:hover {
+      border-color: var(--card-hover);
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+    }
+
+    .card.span-full {
+      grid-column: span 3;
+    }
+
+    @media (max-width: 1150px) { .card.span-full { grid-column: span 2; } }
+    @media (max-width: 750px) { .card.span-full { grid-column: span 1; } }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 14px;
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .card-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      font-weight: 500;
+    }
+
+    /* Modern Toggle Switch */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
     .switch input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #475569; transition: .3s; border-radius: 22px; }
-    .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
-    input:checked + .slider { background-color: #10b981; }
-    input:checked + .slider:before { transform: translateX(20px); }
 
-    #status { text-align: center; margin-bottom: 15px; font-weight: 700; font-size: 15px; min-height: 20px; }
-    .full-width { grid-column: span 2; }
-    @media (max-width: 850px) { .full-width { grid-column: span 1; } }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #1e293b;
+      border: 1px solid var(--card-border);
+      transition: .25s;
+      border-radius: 24px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background-color: #64748b;
+      transition: .25s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background: linear-gradient(135deg, #10b981, #059669);
+      border-color: #10b981;
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(20px);
+      background-color: #fff;
+    }
+
+    /* Timeframe Selector Chips */
+    .tf-chips {
+      display: flex;
+      gap: 6px;
+      margin-top: 14px;
+    }
+
+    .chip {
+      flex: 1;
+      background: #070a12;
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      padding: 8px 0;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+
+    .chip:hover {
+      border-color: rgba(255, 255, 255, 0.2);
+      color: #fff;
+    }
+
+    .chip.active {
+      background: rgba(2, 132, 199, 0.15);
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+    }
+
+    /* FVG Min Points Panel */
+    .points-panel {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px dashed var(--card-border);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 750px) { .points-panel { grid-template-columns: 1fr; } }
+
+    .points-section-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #fbbf24;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .points-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+    }
+
+    .points-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .points-box span {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--accent-cyan);
+    }
+
+    .points-box input {
+      width: 100%;
+      background: #070a12;
+      border: 1px solid var(--card-border);
+      color: #fff;
+      padding: 7px 4px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      text-align: center;
+      outline: none;
+    }
+
+    .points-box input:focus {
+      border-color: var(--accent-cyan);
+    }
+
+    /* Save Bar */
+    .save-bar {
+      margin-top: 32px;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .save-btn {
+      background: linear-gradient(135deg, #10b981, #047857);
+      color: #fff;
+      border: none;
+      padding: 16px 36px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 4px 20px rgba(16, 185, 129, 0.35);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .save-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 25px rgba(16, 185, 129, 0.5);
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>🏦 TUF Capital ICT Control Panel</h1>
-    <div id="status"></div>
 
-    <div class="top-bar">
-      <div class="card" style="margin-bottom:0;">
-        <div class="title">🔗 Discord Webhook URL</div>
-        <input type="text" id="discordWebhookUrl" class="webhook-input" value="${settings.discordWebhookUrl || DEFAULT_WEBHOOK}" placeholder="https://discord.com/api/webhooks/...">
+  <nav class="navbar">
+    <div class="brand">
+      <div class="brand-logo">T</div>
+      <div class="brand-title">TUF Capital <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">| ICT Scanner Engine</span></div>
+    </div>
+    <div class="status-badge">
+      <div class="pulse"></div>
+      <span>24/7 Scanner Active</span>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div id="status-banner"></div>
+
+    <div class="hero-card">
+      <div class="form-group">
+        <div class="form-label">🔗 Discord Channel Webhook URL</div>
+        <input type="text" id="discordWebhookUrl" class="input-field" value="${settings.discordWebhookUrl || DEFAULT_WEBHOOK}" placeholder="https://discord.com/api/webhooks/...">
       </div>
 
-      <div class="card" style="margin-bottom:0;">
-        <div class="title">🎨 Chart Theme</div>
-        <select id="chartTheme" class="theme-select">
-          <option value="light" ${chartTheme === 'light' ? 'selected' : ''}>☀️ White Theme</option>
-          <option value="dark" ${chartTheme === 'dark' ? 'selected' : ''}>🌙 Dark Theme</option>
+      <div class="form-group">
+        <div class="form-label">🎨 Alert Chart Theme</div>
+        <select id="chartTheme" class="select-field">
+          <option value="light" ${chartTheme === 'light' ? 'selected' : ''}>☀️ White Theme (Clean)</option>
+          <option value="dark" ${chartTheme === 'dark' ? 'selected' : ''}>🌙 Dark Theme (Clean)</option>
         </select>
       </div>
 
-      <button type="button" class="test-btn" onclick="sendTestAlert()">🧪 Send Test Alert</button>
+      <button type="button" class="test-btn" onclick="sendTestAlert()">
+        ⚡ Send Test Alert to Discord
+      </button>
     </div>
 
     <form id="configForm">
-      <div class="grid-container">
+      <div class="grid">
         ${patterns.map(pat => {
-          const pData = settings[pat] || { enabled: true, timeframes: [] };
-          const isFvg = pat === 'FVG';
+          const pData = settings[pat.key] || { enabled: true, timeframes: [] };
+          const isFvg = pat.key === 'FVG';
           return `
-          <div class="card ${isFvg ? 'full-width' : ''}">
+          <div class="card ${isFvg ? 'span-full' : ''}">
             <div>
-              <div class="header">
-                <div class="title">${labels[pat] || pat}</div>
+              <div class="card-header">
+                <div>
+                  <div class="card-title">${pat.name}</div>
+                  <div class="card-desc">${pat.desc}</div>
+                </div>
                 <label class="switch">
-                  <input type="checkbox" id="${pat}_enabled" ${pData.enabled ? "checked" : ""}>
+                  <input type="checkbox" id="${pat.key}_enabled" ${pData.enabled ? "checked" : ""}>
                   <span class="slider"></span>
                 </label>
               </div>
-              <div class="tf-group">
+
+              <div class="tf-chips">
                 ${allTfs.map(tf => `
-                  <button type="button" class="btn ${pData.timeframes.includes(tf) ? "active" : ""}" onclick="toggleTf('${pat}', '${tf}', this)">${tf}</button>
+                  <div class="chip ${pData.timeframes.includes(tf) ? "active" : ""}" onclick="toggleTf('${pat.key}', '${tf}', this)">${tf}</div>
                 `).join('')}
               </div>
             </div>
 
             ${isFvg ? `
-            <div style="margin-top: 12px;">
-              <div class="section-label">💱 Forex FVG Min Points (EURUSD, GBPUSD)</div>
-              <div class="min-points-grid">
-                ${allTfs.map(tf => `
-                  <div class="min-points-item">
-                    <label>${tf}</label>
-                    <input type="number" id="forex_fvg_min_${tf}" value="${forexMinPoints[tf] || 100}" placeholder="100">
-                  </div>
-                `).join('')}
+            <div class="points-panel">
+              <div>
+                <div class="points-section-title">💱 Forex FVG Minimum Points (EURUSD, GBPUSD)</div>
+                <div class="points-grid">
+                  ${allTfs.map(tf => `
+                    <div class="points-box">
+                      <span>${tf}</span>
+                      <input type="number" id="forex_fvg_min_${tf}" value="${forexMinPoints[tf] || 100}">
+                    </div>
+                  `).join('')}
+                </div>
               </div>
 
-              <div class="section-label">🥇 Gold FVG Min Points (XAUUSD) ($1.00 = 100 pts)</div>
-              <div class="min-points-grid">
-                ${allTfs.map(tf => `
-                  <div class="min-points-item">
-                    <label>${tf}</label>
-                    <input type="number" id="gold_fvg_min_${tf}" value="${goldMinPoints[tf] || 300}" placeholder="300">
-                  </div>
-                `).join('')}
+              <div>
+                <div class="points-section-title">🥇 Gold FVG Minimum Points (XAUUSD) ($1 = 100 pts)</div>
+                <div class="points-grid">
+                  ${allTfs.map(tf => `
+                    <div class="points-box">
+                      <span>${tf}</span>
+                      <input type="number" id="gold_fvg_min_${tf}" value="${goldMinPoints[tf] || 300}">
+                    </div>
+                  `).join('')}
+                </div>
               </div>
             </div>
             ` : ''}
@@ -562,7 +943,9 @@ function renderAdminHTML(settings) {
         }).join('')}
       </div>
 
-      <button type="submit" class="save-btn">💾 Save All Settings Instantly</button>
+      <div class="save-bar">
+        <button type="submit" class="save-btn">💾 Save All Scanner Settings</button>
+      </div>
     </form>
   </div>
 
@@ -589,16 +972,16 @@ function renderAdminHTML(settings) {
       }
     });
 
-    function toggleTf(pattern, tf, btn) {
+    function toggleTf(pattern, tf, el) {
       if (!settings[pattern]) settings[pattern] = { enabled: true, timeframes: [] };
       if (!settings[pattern].timeframes) settings[pattern].timeframes = [];
       const idx = settings[pattern].timeframes.indexOf(tf);
       if (idx > -1) {
         settings[pattern].timeframes.splice(idx, 1);
-        btn.classList.remove('active');
+        el.classList.remove('active');
       } else {
         settings[pattern].timeframes.push(tf);
-        btn.classList.add('active');
+        el.classList.add('active');
       }
     }
 
@@ -611,9 +994,12 @@ function renderAdminHTML(settings) {
       localStorage.setItem('ict_discord_webhook_url', webhookVal);
       localStorage.setItem('ict_chart_theme', themeVal);
 
-      const status = document.getElementById('status');
-      status.style.color = '#38bdf8';
-      status.innerText = '⏳ Sending TUF Capital Test Alert to Discord...';
+      const banner = document.getElementById('status-banner');
+      banner.style.padding = '12px';
+      banner.style.background = 'rgba(56, 189, 248, 0.1)';
+      banner.style.border = '1px solid rgba(56, 189, 248, 0.3)';
+      banner.style.color = '#38bdf8';
+      banner.innerText = '⏳ Triggering TUF Capital Test Alert to Discord...';
       
       try {
         const res = await fetch('/api/test-alert', {
@@ -623,18 +1009,24 @@ function renderAdminHTML(settings) {
         });
 
         if (res.ok) {
-          status.style.color = '#10b981';
-          status.innerText = '✅ TUF Capital Alert Sent to Discord!';
+          banner.style.background = 'rgba(16, 185, 129, 0.1)';
+          banner.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+          banner.style.color = '#10b981';
+          banner.innerText = '✅ Test Alert Delivered Successfully to Discord!';
         } else {
           const err = await res.json();
-          status.style.color = '#ef4444';
-          status.innerText = '❌ Failed: ' + (err.error || 'Check Discord Webhook URL');
+          banner.style.background = 'rgba(239, 68, 68, 0.1)';
+          banner.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+          banner.style.color = '#ef4444';
+          banner.innerText = '❌ Delivery Failed: ' + (err.error || 'Check Discord Webhook URL');
         }
       } catch (err) {
-        status.style.color = '#ef4444';
-        status.innerText = '❌ Network Error: ' + err.message;
+        banner.style.background = 'rgba(239, 68, 68, 0.1)';
+        banner.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+        banner.style.color = '#ef4444';
+        banner.innerText = '❌ Network Error: ' + err.message;
       }
-      setTimeout(() => status.innerText = '', 5000);
+      setTimeout(() => { banner.innerText = ''; banner.style.padding = '0'; }, 5000);
     }
 
     document.getElementById('configForm').onsubmit = async (e) => {
@@ -672,15 +1064,20 @@ function renderAdminHTML(settings) {
         body: JSON.stringify(settings)
       });
 
-      const status = document.getElementById('status');
+      const banner = document.getElementById('status-banner');
+      banner.style.padding = '12px';
       if (res.ok) {
-        status.style.color = '#10b981';
-        status.innerText = '✅ Settings Saved Instantly!';
+        banner.style.background = 'rgba(16, 185, 129, 0.1)';
+        banner.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+        banner.style.color = '#10b981';
+        banner.innerText = '✅ All Settings Saved & Synchronized!';
       } else {
-        status.style.color = '#ef4444';
-        status.innerText = '❌ Error saving settings!';
+        banner.style.background = 'rgba(239, 68, 68, 0.1)';
+        banner.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+        banner.style.color = '#ef4444';
+        banner.innerText = '❌ Error saving settings!';
       }
-      setTimeout(() => status.innerText = '', 3000);
+      setTimeout(() => { banner.innerText = ''; banner.style.padding = '0'; }, 3000);
     };
   </script>
 </body>
