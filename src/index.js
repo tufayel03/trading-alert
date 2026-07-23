@@ -85,7 +85,7 @@ export default {
       return new Response("Scan triggered manually!", { status: 200 });
     }
 
-    return new Response("ICT Cloudflare Bot Active", { status: 200 });
+    return new Response("TUF Capital ICT Bot Active", { status: 200 });
   }
 };
 
@@ -372,7 +372,7 @@ async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price
     title: `🚨 ${titleWithPoints}`,
     description: desc,
     color: eventTitle.includes("Bullish") || eventTitle.includes("Taken") ? 0x00E6A1 : 0xE60400,
-    footer: { text: "Cloudflare Worker ICT Scanner (Dhaka Time)" }
+    footer: { text: "TUF Capital" }
   };
 
   if (chartImgUrl) {
@@ -400,7 +400,7 @@ function renderAdminHTML(settings) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ICT Bot Control Panel</title>
+  <title>TUF Capital ICT Control Panel</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; max-width: 650px; margin: auto; }
     h1 { color: #38bdf8; font-size: 24px; text-align: center; }
@@ -432,7 +432,7 @@ function renderAdminHTML(settings) {
   </style>
 </head>
 <body>
-  <h1>🎛️ ICT Alert Control Panel</h1>
+  <h1>🏦 TUF Capital ICT Control Panel</h1>
   <div id="status"></div>
 
   <div class="card">
@@ -450,7 +450,7 @@ function renderAdminHTML(settings) {
     </select>
   </div>
 
-  <button type="button" class="test-btn" onclick="sendTestAlert()">🧪 Send White Theme TradingView Screenshot Test Alert</button>
+  <button type="button" class="test-btn" onclick="sendTestAlert()">🧪 Send TUF Capital Test Alert</button>
 
   <form id="configForm" style="margin-top: 15px;">
     ${patterns.map(pat => {
@@ -539,7 +539,7 @@ function renderAdminHTML(settings) {
 
       const status = document.getElementById('status');
       status.style.color = '#38bdf8';
-      status.innerText = '⏳ Capturing White Theme TradingView chart screenshot...';
+      status.innerText = '⏳ Capturing TUF Capital TradingView chart screenshot...';
       
       const res = await fetch('/api/test-alert', {
         method: 'POST',
@@ -549,7 +549,7 @@ function renderAdminHTML(settings) {
 
       if (res.ok) {
         status.style.color = '#10b981';
-        status.innerText = '✅ White Theme TradingView Chart Screenshot Alert Sent!';
+        status.innerText = '✅ TUF Capital Chart Screenshot Alert Sent!';
       } else {
         const err = await res.json();
         status.style.color = '#ef4444';
@@ -594,7 +594,7 @@ function renderAdminHTML(settings) {
       const status = document.getElementById('status');
       if (res.ok) {
         status.style.color = '#10b981';
-        status.innerText = '✅ Settings & White Theme Saved Instantly!';
+        status.innerText = '✅ Settings Saved Instantly!';
       } else {
         status.style.color = '#ef4444';
         status.innerText = '❌ Error saving settings!';
