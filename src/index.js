@@ -1,4 +1,4 @@
-// 24/7 Cloudflare Worker ICT Discord Alert Bot (Dhaka Time & 5 Decimals)
+// 24/7 Cloudflare Worker ICT Discord Alert Bot (Environment Configurable)
 // Runs every 1 minute for free on Cloudflare Workers
 
 const SYMBOLS = [
@@ -7,14 +7,6 @@ const SYMBOLS = [
   { name: "XAUUSD (Gold)", ticker: "GC=F", tvSymbol: "OANDA:XAUUSD", decimals: 2 }
 ];
 
-const CONFIG = {
-  MSS: { enabled: true, timeframes: ["1h", "4h"] },
-  FVG: { enabled: true, timeframes: ["15m", "1h"] },
-  OB: { enabled: true, timeframes: ["1h", "4h"] },
-  Liquidity: { enabled: true, timeframes: ["15m", "1h", "4h"] }
-};
-
-// In-memory fallback cache
 const memoryCache = new Set();
 
 export default {
@@ -28,12 +20,40 @@ export default {
   }
 };
 
+function getConfig(env) {
+  const parseTf = (envVal, defaultArray) => {
+    if (!envVal) return defaultArray;
+    return envVal.split(",").map(s => s.trim());
+  };
+
+  return {
+    MSS: {
+      enabled: env.ENABLE_MSS !== "false",
+      timeframes: parseTf(env.MSS_TIMEFRAMES, ["1h", "4h"])
+    },
+    FVG: {
+      enabled: env.ENABLE_FVG !== "false",
+      timeframes: parseTf(env.FVG_TIMEFRAMES, ["15m", "1h"])
+    },
+    OB: {
+      enabled: env.ENABLE_OB !== "false",
+      timeframes: parseTf(env.OB_TIMEFRAMES, ["1h", "4h"])
+    },
+    Liquidity: {
+      enabled: env.ENABLE_LIQUIDITY !== "false",
+      timeframes: parseTf(env.LIQUIDITY_TIMEFRAMES, ["15m", "1h", "4h"])
+    }
+  };
+}
+
 async function scanAll(env) {
   const webhookUrl = env.DISCORD_WEBHOOK_URL;
   if (!webhookUrl) {
     console.log("No DISCORD_WEBHOOK_URL configured in Cloudflare Worker environment.");
     return;
   }
+
+  const CONFIG = getConfig(env);
 
   for (const sym of SYMBOLS) {
     const timeframes = new Set([
@@ -48,7 +68,6 @@ async function scanAll(env) {
         const candles = await fetchCandles(sym.ticker, tf);
         if (!candles || candles.length < 5) continue;
 
-        // Evaluate confirmed closed candle (prev) to avoid false/duplicate alerts on open bars
         const closedBar = candles[candles.length - 2];
         const barBefore = candles[candles.length - 3];
         const barTwoBefore = candles[candles.length - 4];
@@ -56,9 +75,8 @@ async function scanAll(env) {
         const timestamp = closedBar.timestamp;
         const currentPrice = closedBar.close;
 
-        // 1. FVG Detection (Confirmed Closed Candle)
+        // 1. FVG Detection
         if (CONFIG.FVG.enabled && CONFIG.FVG.timeframes.includes(tf)) {
-          // Bullish FVG: Low[closedBar] > High[barTwoBefore]
           if (closedBar.low > barTwoBefore.high) {
             const key = `${sym.ticker}_${tf}_BULL_FVG_${timestamp}`;
             if (!(await isAlreadyAlerted(env, key))) {
@@ -66,7 +84,6 @@ async function scanAll(env) {
               await sendDiscordEmbed(webhookUrl, "🟢 Bullish FVG Formed", sym, tf, currentPrice);
             }
           }
-          // Bearish FVG: High[closedBar] < Low[barTwoBefore]
           if (closedBar.high < barTwoBefore.low) {
             const key = `${sym.ticker}_${tf}_BEAR_FVG_${timestamp}`;
             if (!(await isAlreadyAlerted(env, key))) {
@@ -76,7 +93,7 @@ async function scanAll(env) {
           }
         }
 
-        // 2. MSS Detection (Market Structure Shift)
+        // 2. MSS Detection
         if (CONFIG.MSS.enabled && CONFIG.MSS.timeframes.includes(tf)) {
           const recentHighs = candles.slice(-12, -3).map(c => c.high);
           const recentLows = candles.slice(-12, -3).map(c => c.low);
@@ -131,7 +148,6 @@ async function scanAll(env) {
   }
 }
 
-// Persistent state management (Cloudflare KV or Memory fallback)
 async function isAlreadyAlerted(env, key) {
   if (env.ALERT_KV) {
     const val = await env.ALERT_KV.get(key);
@@ -142,13 +158,14 @@ async function isAlreadyAlerted(env, key) {
 
 async function markAsAlerted(env, key) {
   if (env.ALERT_KV) {
-    await env.ALERT_KV.put(key, "1", { expirationTtl: 604800 }); // Expire after 7 days
+    await env.ALERT_KV.put(key, "1", { expirationTtl: 604800 });
   }
   memoryCache.add(key);
 }
 
 async function fetchCandles(ticker, timeframe) {
   const intervalMap = {
+    "5m": { interval: "5m", range: "5d" },
     "15m": { interval: "15m", range: "5d" },
     "1h": { interval: "60m", range: "1mo" },
     "4h": { interval: "60m", range: "3mo" },
@@ -186,10 +203,8 @@ async function fetchCandles(ticker, timeframe) {
 }
 
 async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price) {
-  // Format price to 5 decimal places for EURUSD/GBPUSD and 2 for Gold
   const priceFormatted = price.toFixed(symbol.decimals || 4);
 
-  // Format Dhaka Local Time (GMT+6)
   const dhakaTime = new Date().toLocaleString("en-US", {
     timeZone: "Asia/Dhaka",
     year: "numeric",
@@ -201,7 +216,6 @@ async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price
     hour12: true
   });
 
-  // TradingView dynamic chart preview image link
   const chartImgUrl = `https://api.chart-img.com/v1/tradingview/advanced-chart?symbol=${encodeURIComponent(symbol.tvSymbol)}&interval=${timeframe}&theme=dark`;
   const tradingViewUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(symbol.tvSymbol)}`;
 
