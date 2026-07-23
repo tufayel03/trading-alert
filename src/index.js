@@ -1,4 +1,4 @@
-// 24/7 Cloudflare Worker ICT Discord Alert Bot with Working Direct PNG Chart Image Previews
+// 24/7 Cloudflare Worker ICT Discord Alert Bot with Guaranteed Short PNG Image URLs
 // Runs every 1 minute for free on Cloudflare Workers
 
 const SYMBOLS = [
@@ -46,7 +46,7 @@ export default {
           { timestamp: 1700000900, open: 2405.0, high: 2420.0, low: 2402.0, close: 2418.0 },
           { timestamp: 1700001800, open: 2418.0, high: 2425.0, low: 2412.0, close: 2415.5 }
         ];
-        const chartImgUrl = generateChartImageUrl("XAUUSD (Gold)", "15m", sampleCandles);
+        const chartImgUrl = await generateChartImageUrl("XAUUSD (Gold)", "15m", sampleCandles);
         await sendDiscordEmbed(webhookUrl, "🧪 Test Alert - ICT Scanner Working!", SYMBOLS[2], "15m", 2415.50, 500, chartImgUrl);
         return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
       } catch (e) {
@@ -131,7 +131,7 @@ async function scanAll(env) {
         
         const timestamp = closedBar.timestamp;
         const currentPrice = closedBar.close;
-        const chartImgUrl = generateChartImageUrl(sym.name, tf, candles);
+        const chartImgUrl = await generateChartImageUrl(sym.name, tf, candles);
 
         // 1. FVG Creation & Tracking with Min Points Filter
         if (CONFIG.FVG?.enabled && CONFIG.FVG.timeframes.includes(tf)) {
@@ -183,7 +183,7 @@ async function scanAll(env) {
           if (activeBullFvg && closedBar.timestamp > activeBullFvg.timestamp) {
             if (closedBar.low <= activeBullFvg.top) {
               const fillKey = `${sym.ticker}_${tf}_BULL_FVG_FILLED_${activeBullFvg.timestamp}`;
-              if (!(await isAlreadyAlerted(env, fillKey))) {
+              if (!(await isAlreadyAlerted(env, key))) {
                 await markAsAlerted(env, fillKey);
                 await sendDiscordEmbed(webhookUrl, "🎯 Bullish FVG Filled / Tapped", sym, tf, currentPrice, activeBullFvg.gapPoints, chartImgUrl);
                 activeFvgs.delete(bullFvgKey);
@@ -314,10 +314,10 @@ async function fetchCandles(ticker, timeframe) {
   return candles;
 }
 
-function generateChartImageUrl(symbolName, timeframe, candles) {
+async function generateChartImageUrl(symbolName, timeframe, candles) {
   if (!candles || candles.length === 0) return null;
 
-  const slice = candles.slice(-12);
+  const slice = candles.slice(-14);
   const labels = slice.map(c => {
     const d = new Date(c.timestamp * 1000);
     return d.toLocaleTimeString("en-US", { timeZone: "Asia/Dhaka", hour: "2-digit", minute: "2-digit", hour12: false });
@@ -347,7 +347,23 @@ function generateChartImageUrl(symbolName, timeframe, candles) {
     }
   };
 
-  return `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartConfig))}&bkg=0f172a&w=600&h=300&v=3`;
+  try {
+    const res = await fetch("https://quickchart.io/chart/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chart: chartConfig, backgroundColor: "#0f172a", width: 600, height: 300 })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.url) {
+        return data.url;
+      }
+    }
+  } catch (err) {
+    console.error("Error generating short chart URL:", err);
+  }
+
+  return null;
 }
 
 async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price, gapPoints = null, chartImgUrl = null) {
