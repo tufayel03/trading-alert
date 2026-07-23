@@ -1,4 +1,4 @@
-// 24/7 Cloudflare Worker ICT Discord Alert Bot (Environment Configurable)
+// 24/7 Cloudflare Worker ICT Discord Alert Bot with Built-in Web Control Panel
 // Runs every 1 minute for free on Cloudflare Workers
 
 const SYMBOLS = [
@@ -15,53 +15,76 @@ export default {
   },
 
   async fetch(request, env, ctx) {
-    await scanAll(env);
-    return new Response("ICT Cloudflare Worker Scanner executed successfully!", { status: 200 });
+    const url = new URL(request.url);
+
+    // API to save settings from Web Control Panel
+    if (url.pathname === "/api/settings" && request.method === "POST") {
+      try {
+        const body = await request.json();
+        if (env.ALERT_KV) {
+          await env.ALERT_KV.put("SETTINGS_CONFIG", JSON.stringify(body));
+        } else {
+          globalThis.USER_SETTINGS = body;
+        }
+        return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), { status: 400 });
+      }
+    }
+
+    // Serve Interactive Web Control Panel UI
+    if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/admin")) {
+      const settings = await getConfig(env);
+      return new Response(renderAdminHTML(settings), {
+        headers: { "Content-Type": "text/html; charset=utf-8" }
+      });
+    }
+
+    // Manual trigger for testing
+    if (url.pathname === "/scan") {
+      await scanAll(env);
+      return new Response("Scan triggered manually!", { status: 200 });
+    }
+
+    return new Response("ICT Cloudflare Bot Active", { status: 200 });
   }
 };
 
-function getConfig(env) {
-  const parseTf = (envVal, defaultArray) => {
-    if (!envVal) return defaultArray;
-    return envVal.split(",").map(s => s.trim());
-  };
+async function getConfig(env) {
+  let custom = null;
+  if (env.ALERT_KV) {
+    const raw = await env.ALERT_KV.get("SETTINGS_CONFIG");
+    if (raw) custom = JSON.parse(raw);
+  } else if (globalThis.USER_SETTINGS) {
+    custom = globalThis.USER_SETTINGS;
+  }
+
+  if (custom) return custom;
+
+  // Fallback to environment variables or defaults
+  const parseTf = (envVal, defaultArray) => envVal ? envVal.split(",").map(s => s.trim()) : defaultArray;
 
   return {
-    MSS: {
-      enabled: env.ENABLE_MSS !== "false",
-      timeframes: parseTf(env.MSS_TIMEFRAMES, ["1h", "4h"])
-    },
-    FVG: {
-      enabled: env.ENABLE_FVG !== "false",
-      timeframes: parseTf(env.FVG_TIMEFRAMES, ["15m", "1h"])
-    },
-    OB: {
-      enabled: env.ENABLE_OB !== "false",
-      timeframes: parseTf(env.OB_TIMEFRAMES, ["1h", "4h"])
-    },
-    Liquidity: {
-      enabled: env.ENABLE_LIQUIDITY !== "false",
-      timeframes: parseTf(env.LIQUIDITY_TIMEFRAMES, ["15m", "1h", "4h"])
-    }
+    MSS: { enabled: env.ENABLE_MSS !== "false", timeframes: parseTf(env.MSS_TIMEFRAMES, ["1h", "4h"]) },
+    FVG: { enabled: env.ENABLE_FVG !== "false", timeframes: parseTf(env.FVG_TIMEFRAMES, ["15m", "1h"]) },
+    OB: { enabled: env.ENABLE_OB !== "false", timeframes: parseTf(env.OB_TIMEFRAMES, ["1h", "4h"]) },
+    Liquidity: { enabled: env.ENABLE_LIQUIDITY !== "false", timeframes: parseTf(env.LIQUIDITY_TIMEFRAMES, ["15m", "1h", "4h"]) }
   };
 }
 
 async function scanAll(env) {
   const webhookUrl = env.DISCORD_WEBHOOK_URL;
-  if (!webhookUrl) {
-    console.log("No DISCORD_WEBHOOK_URL configured in Cloudflare Worker environment.");
-    return;
-  }
+  if (!webhookUrl) return;
 
-  const CONFIG = getConfig(env);
+  const CONFIG = await getConfig(env);
 
   for (const sym of SYMBOLS) {
-    const timeframes = new Set([
-      ...CONFIG.MSS.timeframes,
-      ...CONFIG.FVG.timeframes,
-      ...CONFIG.OB.timeframes,
-      ...CONFIG.Liquidity.timeframes
-    ]);
+    const timeframes = new Set();
+    ["MSS", "FVG", "OB", "Liquidity"].forEach(pattern => {
+      if (CONFIG[pattern] && CONFIG[pattern].enabled) {
+        (CONFIG[pattern].timeframes || []).forEach(tf => timeframes.add(tf));
+      }
+    });
 
     for (const tf of timeframes) {
       try {
@@ -76,7 +99,7 @@ async function scanAll(env) {
         const currentPrice = closedBar.close;
 
         // 1. FVG Detection
-        if (CONFIG.FVG.enabled && CONFIG.FVG.timeframes.includes(tf)) {
+        if (CONFIG.FVG?.enabled && CONFIG.FVG.timeframes.includes(tf)) {
           if (closedBar.low > barTwoBefore.high) {
             const key = `${sym.ticker}_${tf}_BULL_FVG_${timestamp}`;
             if (!(await isAlreadyAlerted(env, key))) {
@@ -94,7 +117,7 @@ async function scanAll(env) {
         }
 
         // 2. MSS Detection
-        if (CONFIG.MSS.enabled && CONFIG.MSS.timeframes.includes(tf)) {
+        if (CONFIG.MSS?.enabled && CONFIG.MSS.timeframes.includes(tf)) {
           const recentHighs = candles.slice(-12, -3).map(c => c.high);
           const recentLows = candles.slice(-12, -3).map(c => c.low);
           const swingHigh = Math.max(...recentHighs);
@@ -118,7 +141,7 @@ async function scanAll(env) {
         }
 
         // 3. Liquidity Sweep Detection
-        if (CONFIG.Liquidity.enabled && CONFIG.Liquidity.timeframes.includes(tf)) {
+        if (CONFIG.Liquidity?.enabled && CONFIG.Liquidity.timeframes.includes(tf)) {
           const recentHighs = candles.slice(-15, -3).map(c => c.high);
           const recentLows = candles.slice(-15, -3).map(c => c.low);
           const swingHigh = Math.max(...recentHighs);
@@ -232,4 +255,101 @@ async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ embeds: [embed] })
   });
+}
+
+function renderAdminHTML(settings) {
+  const patterns = ["FVG", "MSS", "OB", "Liquidity"];
+  const allTfs = ["5m", "15m", "1h", "4h", "1d"];
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ICT Bot Control Panel</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; max-width: 600px; margin: auto; }
+    h1 { color: #38bdf8; font-size: 24px; text-align: center; }
+    .card { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    .header { display: flex; justify-content: space-between; align-items: center; }
+    .title { font-weight: bold; font-size: 18px; color: #f1f5f9; }
+    .tf-group { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    .btn { background: #334155; border: 1px solid #475569; color: #94a3b8; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+    .btn.active { background: #0284c7; color: #ffffff; border-color: #38bdf8; }
+    .save-btn { width: 100%; background: #10b981; color: white; border: none; padding: 14px; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 20px; }
+    .save-btn:hover { background: #059669; }
+    .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #475569; transition: .3s; border-radius: 24px; }
+    .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
+    input:checked + .slider { background-color: #10b981; }
+    input:checked + .slider:before { transform: translateX(20px); }
+    #status { text-align: center; margin-top: 10px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>🎛️ ICT Alert Control Panel</h1>
+  <div id="status"></div>
+  <form id="configForm">
+    ${patterns.map(pat => {
+      const pData = settings[pat] || { enabled: true, timeframes: [] };
+      return `
+      <div class="card">
+        <div class="header">
+          <span class="title">${pat} Alerts</span>
+          <label class="switch">
+            <input type="checkbox" id="${pat}_enabled" ${pData.enabled ? "checked" : ""}>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="tf-group">
+          ${allTfs.map(tf => `
+            <button type="button" class="btn ${pData.timeframes.includes(tf) ? "active" : ""}" onclick="toggleTf('${pat}', '${tf}', this)">${tf}</button>
+          `).join('')}
+        </div>
+      </div>`;
+    }).join('')}
+    <button type="submit" class="save-btn">💾 Save Settings Instant</button>
+  </form>
+
+  <script>
+    const settings = ${JSON.stringify(settings)};
+
+    function toggleTf(pattern, tf, btn) {
+      if (!settings[pattern].timeframes) settings[pattern].timeframes = [];
+      const idx = settings[pattern].timeframes.indexOf(tf);
+      if (idx > -1) {
+        settings[pattern].timeframes.splice(idx, 1);
+        btn.classList.remove('active');
+      } else {
+        settings[pattern].timeframes.push(tf);
+        btn.classList.add('active');
+      }
+    }
+
+    document.getElementById('configForm').onsubmit = async (e) => {
+      e.preventDefault();
+      ['FVG', 'MSS', 'OB', 'Liquidity'].forEach(pat => {
+        settings[pat].enabled = document.getElementById(pat + '_enabled').checked;
+      });
+
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+      });
+
+      const status = document.getElementById('status');
+      if (res.ok) {
+        status.style.color = '#10b981';
+        status.innerText = '✅ Settings Saved Instantly!';
+      } else {
+        status.style.color = '#ef4444';
+        status.innerText = '❌ Error saving settings!';
+      }
+      setTimeout(() => status.innerText = '', 3000);
+    };
+  </script>
+</body>
+</html>`;
 }
