@@ -1,4 +1,4 @@
-// 24/7 Cloudflare Worker ICT Discord Alert Bot with BOS, FVG, MSS, OB, and Liquidity Detection
+// 24/7 Cloudflare Worker ICT Discord Alert Bot with Responsive 2-Column Desktop Grid
 // Runs every 1 minute for free on Cloudflare Workers
 
 const DEFAULT_WEBHOOK = "https://discord.com/api/webhooks/1529895992118214706/72e329IvsoaXVMr3zIRf5dQVXaYc3dwE3";
@@ -444,100 +444,127 @@ function renderAdminHTML(settings) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TUF Capital ICT Control Panel</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; max-width: 650px; margin: auto; }
-    h1 { color: #38bdf8; font-size: 24px; text-align: center; }
-    .card { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b1329; color: #f8fafc; padding: 24px; margin: 0; }
+    .container { max-width: 1350px; margin: auto; }
+    h1 { color: #38bdf8; font-size: 26px; margin-bottom: 20px; text-align: center; font-weight: 800; letter-spacing: -0.5px; }
+    
+    .top-bar { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    @media (max-width: 900px) { .top-bar { grid-template-columns: 1fr; } }
+
+    .grid-container { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+    @media (max-width: 850px) { .grid-container { grid-template-columns: 1fr; } }
+
+    .card { background: #1e293b; border-radius: 14px; padding: 18px 22px; border: 1px solid #334155; box-shadow: 0 4px 14px rgba(0,0,0,0.35); height: 100%; display: flex; flex-direction: column; justify-content: space-between; }
     .header { display: flex; justify-content: space-between; align-items: center; }
-    .title { font-weight: bold; font-size: 18px; color: #f1f5f9; }
-    .sub-title { font-size: 12px; color: #94a3b8; margin-top: 4px; }
-    .section-label { font-size: 13px; font-weight: bold; color: #fbbf24; margin-top: 12px; margin-bottom: 4px; }
-    .tf-group { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-    .btn { background: #334155; border: 1px solid #475569; color: #94a3b8; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; }
-    .btn.active { background: #0284c7; color: #ffffff; border-color: #38bdf8; }
-    .min-points-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; margin-top: 8px; background: #0f172a; padding: 12px; border-radius: 8px; }
-    .min-points-item { display: flex; flex-direction: column; gap: 4px; }
-    .min-points-item label { font-size: 11px; font-weight: bold; color: #38bdf8; }
-    .min-points-item input { background: #1e293b; border: 1px solid #475569; color: white; padding: 6px; border-radius: 6px; font-weight: bold; text-align: center; }
-    .save-btn { width: 100%; background: #10b981; color: white; border: none; padding: 14px; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 15px; }
+    .title { font-weight: 700; font-size: 16px; color: #f1f5f9; }
+    .sub-title { font-size: 11px; color: #94a3b8; margin-top: 3px; }
+    .section-label { font-size: 12px; font-weight: 700; color: #fbbf24; margin-top: 14px; margin-bottom: 4px; }
+    
+    .tf-group { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+    .btn { background: #0f172a; border: 1px solid #334155; color: #94a3b8; padding: 7px 13px; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 13px; transition: all 0.2s; }
+    .btn.active { background: #0284c7; color: #ffffff; border-color: #38bdf8; box-shadow: 0 0 10px rgba(56, 189, 248, 0.3); }
+
+    .min-points-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 6px; background: #0f172a; padding: 10px; border-radius: 8px; }
+    .min-points-item { display: flex; flex-direction: column; gap: 2px; }
+    .min-points-item label { font-size: 10px; font-weight: bold; color: #38bdf8; text-align: center; }
+    .min-points-item input { background: #1e293b; border: 1px solid #475569; color: white; padding: 5px 2px; border-radius: 6px; font-weight: bold; text-align: center; font-size: 12px; width: 100%; }
+
+    .save-btn { width: 100%; background: #10b981; color: white; border: none; padding: 16px; border-radius: 12px; font-size: 17px; font-weight: 800; cursor: pointer; margin-top: 20px; box-shadow: 0 4px 16px rgba(16, 185, 129, 0.4); transition: background 0.2s; }
     .save-btn:hover { background: #059669; }
-    .test-btn { width: 100%; background: #8b5cf6; color: white; border: none; padding: 12px; border-radius: 10px; font-size: 15px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+
+    .test-btn { height: 100%; background: #8b5cf6; color: white; border: none; padding: 12px; border-radius: 12px; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(139, 92, 246, 0.35); }
     .test-btn:hover { background: #7c3aed; }
-    .webhook-input { width: 100%; box-sizing: border-box; margin-top: 8px; padding: 10px; background: #0f172a; border: 1px solid #475569; color: white; border-radius: 8px; font-size: 13px; }
-    .theme-select { width: 100%; box-sizing: border-box; margin-top: 8px; padding: 10px; background: #0f172a; border: 1px solid #475569; color: white; border-radius: 8px; font-size: 13px; }
-    .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+
+    .webhook-input, .theme-select { width: 100%; margin-top: 6px; padding: 9px 12px; background: #0f172a; border: 1px solid #334155; color: white; border-radius: 8px; font-size: 13px; font-weight: 500; }
+
+    .switch { position: relative; display: inline-block; width: 42px; height: 22px; }
     .switch input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #475569; transition: .3s; border-radius: 24px; }
-    .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #475569; transition: .3s; border-radius: 22px; }
+    .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
     input:checked + .slider { background-color: #10b981; }
     input:checked + .slider:before { transform: translateX(20px); }
-    #status { text-align: center; margin-top: 10px; font-weight: bold; }
+
+    #status { text-align: center; margin-bottom: 15px; font-weight: 700; font-size: 15px; min-height: 20px; }
+    .full-width { grid-column: span 2; }
+    @media (max-width: 850px) { .full-width { grid-column: span 1; } }
   </style>
 </head>
 <body>
-  <h1>🏦 TUF Capital ICT Control Panel</h1>
-  <div id="status"></div>
+  <div class="container">
+    <h1>🏦 TUF Capital ICT Control Panel</h1>
+    <div id="status"></div>
 
-  <div class="card">
-    <div class="title">🔗 Discord Webhook URL</div>
-    <div class="sub-title">Paste your Discord channel webhook URL below:</div>
-    <input type="text" id="discordWebhookUrl" class="webhook-input" value="${settings.discordWebhookUrl || DEFAULT_WEBHOOK}" placeholder="https://discord.com/api/webhooks/...">
-  </div>
+    <div class="top-bar">
+      <div class="card" style="margin-bottom:0;">
+        <div class="title">🔗 Discord Webhook URL</div>
+        <input type="text" id="discordWebhookUrl" class="webhook-input" value="${settings.discordWebhookUrl || DEFAULT_WEBHOOK}" placeholder="https://discord.com/api/webhooks/...">
+      </div>
 
-  <div class="card">
-    <div class="title">🎨 Chart Theme Preference</div>
-    <div class="sub-title">Select White (Light Theme) or Dark Theme for alert screenshots:</div>
-    <select id="chartTheme" class="theme-select">
-      <option value="light" ${chartTheme === 'light' ? 'selected' : ''}>☀️ White Theme (Clean - No Volume)</option>
-      <option value="dark" ${chartTheme === 'dark' ? 'selected' : ''}>🌙 Dark Theme (Clean - No Volume)</option>
-    </select>
-  </div>
+      <div class="card" style="margin-bottom:0;">
+        <div class="title">🎨 Chart Theme</div>
+        <select id="chartTheme" class="theme-select">
+          <option value="light" ${chartTheme === 'light' ? 'selected' : ''}>☀️ White Theme</option>
+          <option value="dark" ${chartTheme === 'dark' ? 'selected' : ''}>🌙 Dark Theme</option>
+        </select>
+      </div>
 
-  <button type="button" class="test-btn" onclick="sendTestAlert()">🧪 Send TUF Capital Test Alert (BOS)</button>
+      <button type="button" class="test-btn" onclick="sendTestAlert()">🧪 Send Test Alert</button>
+    </div>
 
-  <form id="configForm" style="margin-top: 15px;">
-    ${patterns.map(pat => {
-      const pData = settings[pat] || { enabled: true, timeframes: [] };
-      return `
-      <div class="card">
-        <div class="header">
-          <div class="title">${labels[pat] || pat}</div>
-          <label class="switch">
-            <input type="checkbox" id="${pat}_enabled" ${pData.enabled ? "checked" : ""}>
-            <span class="slider"></span>
-          </label>
-        </div>
-        <div class="tf-group">
-          ${allTfs.map(tf => `
-            <button type="button" class="btn ${pData.timeframes.includes(tf) ? "active" : ""}" onclick="toggleTf('${pat}', '${tf}', this)">${tf}</button>
-          `).join('')}
-        </div>
-
-        ${pat === 'FVG' ? `
-        <div class="section-label">💱 Forex FVG Min Points (EURUSD, GBPUSD)</div>
-        <div class="min-points-grid">
-          ${allTfs.map(tf => `
-            <div class="min-points-item">
-              <label>${tf} Points</label>
-              <input type="number" id="forex_fvg_min_${tf}" value="${forexMinPoints[tf] || 100}" placeholder="100">
+    <form id="configForm">
+      <div class="grid-container">
+        ${patterns.map(pat => {
+          const pData = settings[pat] || { enabled: true, timeframes: [] };
+          const isFvg = pat === 'FVG';
+          return `
+          <div class="card ${isFvg ? 'full-width' : ''}">
+            <div>
+              <div class="header">
+                <div class="title">${labels[pat] || pat}</div>
+                <label class="switch">
+                  <input type="checkbox" id="${pat}_enabled" ${pData.enabled ? "checked" : ""}>
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="tf-group">
+                ${allTfs.map(tf => `
+                  <button type="button" class="btn ${pData.timeframes.includes(tf) ? "active" : ""}" onclick="toggleTf('${pat}', '${tf}', this)">${tf}</button>
+                `).join('')}
+              </div>
             </div>
-          `).join('')}
-        </div>
 
-        <div class="section-label">🥇 Gold FVG Min Points (XAUUSD) ($1.00 = 100 pts)</div>
-        <div class="min-points-grid">
-          ${allTfs.map(tf => `
-            <div class="min-points-item">
-              <label>${tf} Points</label>
-              <input type="number" id="gold_fvg_min_${tf}" value="${goldMinPoints[tf] || 300}" placeholder="300">
+            ${isFvg ? `
+            <div style="margin-top: 12px;">
+              <div class="section-label">💱 Forex FVG Min Points (EURUSD, GBPUSD)</div>
+              <div class="min-points-grid">
+                ${allTfs.map(tf => `
+                  <div class="min-points-item">
+                    <label>${tf}</label>
+                    <input type="number" id="forex_fvg_min_${tf}" value="${forexMinPoints[tf] || 100}" placeholder="100">
+                  </div>
+                `).join('')}
+              </div>
+
+              <div class="section-label">🥇 Gold FVG Min Points (XAUUSD) ($1.00 = 100 pts)</div>
+              <div class="min-points-grid">
+                ${allTfs.map(tf => `
+                  <div class="min-points-item">
+                    <label>${tf}</label>
+                    <input type="number" id="gold_fvg_min_${tf}" value="${goldMinPoints[tf] || 300}" placeholder="300">
+                  </div>
+                `).join('')}
+              </div>
             </div>
-          `).join('')}
-        </div>
-        ` : ''}
+            ` : ''}
 
-      </div>`;
-    }).join('')}
-    <button type="submit" class="save-btn">💾 Save Settings Instant</button>
-  </form>
+          </div>`;
+        }).join('')}
+      </div>
+
+      <button type="submit" class="save-btn">💾 Save All Settings Instantly</button>
+    </form>
+  </div>
 
   <script>
     const settings = ${JSON.stringify(settings)};
@@ -586,7 +613,7 @@ function renderAdminHTML(settings) {
 
       const status = document.getElementById('status');
       status.style.color = '#38bdf8';
-      status.innerText = '⏳ Sending TUF Capital BOS Test Alert to Discord...';
+      status.innerText = '⏳ Sending TUF Capital Test Alert to Discord...';
       
       try {
         const res = await fetch('/api/test-alert', {
@@ -597,7 +624,7 @@ function renderAdminHTML(settings) {
 
         if (res.ok) {
           status.style.color = '#10b981';
-          status.innerText = '✅ TUF Capital BOS Alert Sent to Discord!';
+          status.innerText = '✅ TUF Capital Alert Sent to Discord!';
         } else {
           const err = await res.json();
           status.style.color = '#ef4444';
