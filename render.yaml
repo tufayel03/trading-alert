@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: ict-discord-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python ict_bot.py
+    envVars:
+      - key: DISCORD_WEBHOOK_URL
+        sync: false
+      - key: CONTINUOUS_MODE
+        value: "true"

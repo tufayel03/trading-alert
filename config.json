@@ -1,0 +1,26 @@
+{
+  "discord_webhook_url": "ENV_DISCORD_WEBHOOK_URL",
+  "symbols": [
+    { "name": "EURUSD", "ticker": "EURUSD=X" },
+    { "name": "GBPUSD", "ticker": "GBPUSD=X" },
+    { "name": "XAUUSD (Gold)", "ticker": "GC=F" }
+  ],
+  "settings": {
+    "MSS": {
+      "enabled": true,
+      "timeframes": ["1h", "4h"]
+    },
+    "FVG": {
+      "enabled": true,
+      "timeframes": ["15m", "1h"]
+    },
+    "OB": {
+      "enabled": true,
+      "timeframes": ["1h", "4h"]
+    },
+    "Liquidity": {
+      "enabled": true,
+      "timeframes": ["15m", "1h", "4h"]
+    }
+  }
+}

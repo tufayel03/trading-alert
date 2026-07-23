@@ -1,0 +1,12 @@
+{
+  "name": "ict-discord-worker",
+  "version": "1.0.0",
+  "description": "24/7 Cloudflare Worker ICT Discord Alert Bot",
+  "main": "src/index.js",
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

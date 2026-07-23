@@ -1,0 +1,8 @@
+name = "ict-discord-worker"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+[triggers]
+crons = ["* * * * *"]
+
+# You can set DISCORD_WEBHOOK_URL via 'npx wrangler secret put DISCORD_WEBHOOK_URL' or in Cloudflare Dashboard
