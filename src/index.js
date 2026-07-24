@@ -73,14 +73,14 @@ export default {
     // Endpoint to Register Discord Slash Commands (/scan & /status)
     if (url.pathname === "/api/register-commands") {
       try {
-        const botToken = request.headers.get("Authorization") || url.searchParams.get("token") || env.DISCORD_BOT_TOKEN;
-        if (!botToken) {
+        const rawToken = request.headers.get("Authorization") || url.searchParams.get("token") || env.DISCORD_BOT_TOKEN || "";
+        const cleanToken = decodeURIComponent(rawToken).trim().replace(/^Bot\s+/i, "");
+        if (!cleanToken) {
           return new Response(JSON.stringify({
             error: "Missing bot token. Please visit: /api/register-commands?token=YOUR_BOT_TOKEN"
           }), { status: 400, headers: { "Content-Type": "application/json" } });
         }
 
-        const cleanToken = botToken.replace(/^Bot\s+/i, "");
         const appId = "1530212536920703106";
         const guildId = url.searchParams.get("guild_id");
 
