@@ -76,19 +76,25 @@ export default {
         const botToken = request.headers.get("Authorization") || url.searchParams.get("token") || env.DISCORD_BOT_TOKEN;
         if (!botToken) {
           return new Response(JSON.stringify({
-            error: "Missing bot token. Please visit this link with your Bot Token: /api/register-commands?token=YOUR_BOT_TOKEN"
+            error: "Missing bot token. Please visit: /api/register-commands?token=YOUR_BOT_TOKEN"
           }), { status: 400, headers: { "Content-Type": "application/json" } });
         }
 
         const cleanToken = botToken.replace(/^Bot\s+/i, "");
         const appId = "1530212536920703106";
+        const guildId = url.searchParams.get("guild_id");
 
         const commands = [
           { name: "scan", description: "Trigger an instant 24/7 market scan for EURUSD, GBPUSD & Gold" },
           { name: "status", description: "Check TUF Capital ICT Scanner status and active timeframes" }
         ];
 
-        const discordRes = await fetch(`https://discord.com/api/v10/applications/${appId}/commands`, {
+        // If guild_id is passed, register instantly to specific server; otherwise register globally
+        const targetUrl = guildId
+          ? `https://discord.com/api/v10/applications/${appId}/guilds/${guildId}/commands`
+          : `https://discord.com/api/v10/applications/${appId}/commands`;
+
+        const discordRes = await fetch(targetUrl, {
           method: "PUT",
           headers: {
             "Authorization": `Bot ${cleanToken}`,
@@ -98,7 +104,7 @@ export default {
         });
 
         const resData = await discordRes.json();
-        return new Response(JSON.stringify({ success: discordRes.ok, registered: resData }), {
+        return new Response(JSON.stringify({ success: discordRes.ok, mode: guildId ? "Instant Guild Mode" : "Global Mode", registered: resData }), {
           headers: { "Content-Type": "application/json" }
         });
       } catch (e) {
