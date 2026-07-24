@@ -86,10 +86,6 @@ sDispl     = input.bool  (           false        , title = 'Show Displacement' 
 perc_Body  = 0.36 // input.int(   36, minval=1, maxval=36) / 100
 bxBack     = 10   // input.int(   10, minval=0, maxval=10)
 
-sVimbl     = input.bool  (           true         , title = ''                       ,   group = 'Volume Imbalance' , inline = 'VI'                                    )
-visVim     = input.int   (             2          , title = "   # Visible VI's  "+sp1,   group = 'Volume Imbalance' , inline = 'VI'      , minval = 2, maxval = 100    ) 
-cVimbl     = input.color (color.new(#06b2d0,  0), title = ''                       ,   group = 'Volume Imbalance' , inline = 'VI'                                    )
-
 //Order Blocks  
 showOB     = input.bool  (           true         , title = 'Show Order Blocks'      ,   group = 'Order Blocks'                                                        )
 length     = input.int   (            10          , title = 'Swing Lookback'         ,   group = 'Order Blocks'                          , minval = 3                  )
@@ -140,7 +136,7 @@ cNDOG2     = input.color (color.new(#4dd0e1, 65), title =    ''     , inline='ND
 maxNDOG    = input.int   (             1          , title = 'Show max', inline='NDOG',   group = 'NWOG/NDOG'                , minval = 0, maxval =  50                 )
 
 //Fibonacci 
-iFib       = input.string(           'NONE'      , title = 'Fibonacci between last: ',   group = 'Fibonacci', options=['FVG', 'BPR', 'OB', 'Liq', 'VI', 'NWOG', 'NONE'])
+iFib       = input.string(           'NONE'      , title = 'Fibonacci between last: ',   group = 'Fibonacci', options=['FVG', 'BPR', 'OB', 'Liq', 'NWOG', 'NONE'])
 iExt       = input.bool  (           false       , title = 'Extend lines'            ,   group = 'Fibonacci'                                                           )
 
 
@@ -266,9 +262,7 @@ var float friCp = na, var int friCi = na // Friday Close price/index
 var float monOp = na, var int monOi = na // Monday Open  price/index
 
 var float prDCp = na, var int prDCi = na // Previous Day Open price/index
-var float cuDOp = na, var int cuDOi = na // Current  Day Open price/index
-
-var _2ln_lb [] Vimbal     = array.new<  _2ln_lb >() 
+var float cuDOp = na, var int cuDOi = na // Current  Day Open price/index 
 
 var   liq   [] b_liq_B    = array.new<    liq   >(1, liq.new(box(na), false, false, false, line(na)))
 var   liq   [] b_liq_S    = array.new<    liq   >(1, liq.new(box(na), false, false, false, line(na)))
@@ -622,35 +616,6 @@ hgst        = math.max(high[bsNOTbodyDN[1]], lPl[bsNOTbodyDN[1]])
 //Imbalance
 imbalanceUP = L_bodyUP[1] and (i_FVG == 'FVG' ? low  > high[2] : low  < high[2])
 imbalanceDN = L_bodyDN[1] and (i_FVG == 'FVG' ? high < low [2] : high > low [2])
-
-//Volume Imbalance
-vImb_Bl     = open > close[1] and high[1] > low  and close > close[1] and open > open[1] and high[1] < mn
-vImb_Br     = open < close[1] and low [1] < high and close < close[1] and open < open[1] and low [1] > mx
-
-if sVimbl
-    if vImb_Bl
-        Vimbal.unshift(
-         _2ln_lb.new(
-          line.new (n -1, mx[1], n +3, mx[1], color=cVimbl)
-         , line.new (n   , mn   , n +3, mn   , color=cVimbl)
-          , label.new(n +3, math.avg    (mx[1], mn), text='VI'
-         , color=color(na) , textcolor=cVimbl, style=label.style_label_left)
-          )
-         )
-    if vImb_Br
-        Vimbal.unshift(
-         _2ln_lb.new(
-          line.new (n -1, mn[1], n +3, mn[1], color=cVimbl)
-         , line.new (n   , mx   , n +3, mx   , color=cVimbl)
-          , label.new(n +3, math.avg    (mn[1], mx), text='VI'
-         , color=color(na) , textcolor=cVimbl, style=label.style_label_left)
-          )
-         )
-    if Vimbal.size() > visVim 
-        pop = Vimbal.pop()
-        pop.l1.delete()
-        pop.l2.delete()
-        pop.lb.delete()
 
 //Fair Value Gap  
 if barstate.isfirst
@@ -1126,17 +1091,6 @@ if barstate.islast
                 y2  := AFirst ? 
                  ABottom ? yBT : yBB :
                  ABottom ? yAB : yAT
-        'VI'    =>
-            if Vimbal.size() > 1
-                AxA = Vimbal.get(1).l2.get_x1(), AxB = Vimbal.get(1).l1.get_x1()
-                BxA = Vimbal.get(0).l2.get_x1(), BxB = Vimbal.get(0).l1.get_x1()
-                AyA = Vimbal.get(1).l2.get_y1(), AyB = Vimbal.get(1).l1.get_y1()
-                ByA = Vimbal.get(0).l2.get_y1(), ByB = Vimbal.get(0).l1.get_y1()
-                ABt = math.min(ByA, ByB) > math.min(AyA, AyB) 
-                x1 := math.max(AxA, AxB) 
-                x2 := math.max(BxA, BxB) 
-                y1 := ABt ? math.min(AyA, AyB) : math.max(AyA, AyB) 
-                y2 := ABt ? math.max(ByA, ByB) : math.min(ByA, ByB)  
         'NWOG'  =>
             if bl_NWOG.size() > 1
                 up  := bl_NWOG.get(0).b
