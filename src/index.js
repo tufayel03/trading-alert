@@ -70,6 +70,42 @@ export default {
       }
     }
 
+    // Endpoint to Register Discord Slash Commands (/scan & /status)
+    if (url.pathname === "/api/register-commands") {
+      try {
+        const botToken = request.headers.get("Authorization") || url.searchParams.get("token") || env.DISCORD_BOT_TOKEN;
+        if (!botToken) {
+          return new Response(JSON.stringify({
+            error: "Missing bot token. Please visit this link with your Bot Token: /api/register-commands?token=YOUR_BOT_TOKEN"
+          }), { status: 400, headers: { "Content-Type": "application/json" } });
+        }
+
+        const cleanToken = botToken.replace(/^Bot\s+/i, "");
+        const appId = "1530212536920703106";
+
+        const commands = [
+          { name: "scan", description: "Trigger an instant 24/7 market scan for EURUSD, GBPUSD & Gold" },
+          { name: "status", description: "Check TUF Capital ICT Scanner status and active timeframes" }
+        ];
+
+        const discordRes = await fetch(`https://discord.com/api/v10/applications/${appId}/commands`, {
+          method: "PUT",
+          headers: {
+            "Authorization": `Bot ${cleanToken}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(commands)
+        });
+
+        const resData = await discordRes.json();
+        return new Response(JSON.stringify({ success: discordRes.ok, registered: resData }), {
+          headers: { "Content-Type": "application/json" }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), { status: 400, headers: { "Content-Type": "application/json" } });
+      }
+    }
+
     // Save Settings API
     if (url.pathname === "/api/settings" && request.method === "POST") {
       try {
