@@ -207,6 +207,8 @@ type mss
     label[] lbBosBr
     bool    bull_event
     bool    bear_event
+    bool    bull_bos
+    bool    bear_bos
 
 type liq
     box   bx
@@ -242,6 +244,8 @@ var mss MSS = mss.new(
  , array.new < label >()
  , array.new < label >()
  , array.new < label >()
+ , false
+ , false
  , false
  , false
  )
@@ -545,22 +549,22 @@ draw(left, col) =>
                     if aZZ.y.get(iH) != MSS.l_bosBl.get(0).get_y2() and
                        aZZ.y.get(iH) != MSS.l_mssBl.get(0).get_y2()
                         MSS.l_bosBl.unshift(set_lin(iH, 'Bl')), MSS.lbBosBl.unshift(set_lab(iH, 'Bl'))
-                        alert_bullBOS := true
+                        MSS.bull_bos := true
                 else  
                     if aZZ.y.get(iH) != MSS.l_mssBl.get(0).get_y2()                     
                         MSS.l_bosBl.unshift(set_lin(iH, 'Bl')), MSS.lbBosBl.unshift(set_lab(iH, 'Bl'))
-                        alert_bullBOS := true
+                        MSS.bull_bos := true
             // BOS Bearish
             MSS.dir == -1 and close < aZZ.y.get(iL) and iBOS =>
                 if MSS.l_bosBr.size() > 0
                     if aZZ.y.get(iL) != MSS.l_bosBr.get(0).get_y2() and
                        aZZ.y.get(iL) != MSS.l_mssBr.get(0).get_y2()
                         MSS.l_bosBr.unshift(set_lin(iL, 'Br')), MSS.lbBosBr.unshift(set_lab(iL, 'Br'))
-                        alert_bearBOS := true
+                        MSS.bear_bos := true
                 else
                     if aZZ.y.get(iL) != MSS.l_mssBr.get(0).get_y2()                     
                         MSS.l_bosBr.unshift(set_lin(iL, 'Br')), MSS.lbBosBr.unshift(set_lab(iL, 'Br'))
-                        alert_bearBOS := true
+                        MSS.bear_bos := true
         if not iMSS
             MSS.l_mssBl.get(0).set_color(color(na)), MSS.lbMssBl.get(0).set_textcolor(color(na))
             MSS.l_mssBr.get(0).set_color(color(na)), MSS.lbMssBr.get(0).set_textcolor(color(na))
@@ -570,10 +574,9 @@ draw(left, col) =>
 //-----------------------------------------------------------------------------}
 //Calculations
 //-----------------------------------------------------------------------------{
-alert_bullBOS     := false
-alert_bearBOS     := false
+MSS.bull_bos      := false
+MSS.bear_bos      := false
 alert_buysideLiq  := false
-alert_sellsideLiq := false
 alert_sellsideLiq := false
 alert_bullOB      := false
 alert_bearOB      := false
@@ -1161,8 +1164,8 @@ alert_bearFVG = imbalanceDN and per and shwFVG and not imbalanceDN[1]
 img_url = "https://api.chart-img.com/v2/tradingview/advanced-chart?symbol=" + syminfo.prefix + ":" + syminfo.ticker + "&interval=" + timeframe.period + "&theme=dark"
 
 // Alert Conditions for TradingView UI Setup
-alertcondition(alert_bullBOS,    title="Bullish BOS",               message="{\"content\": \"🟢 **Bullish BOS Detected!**\\n**Symbol:** {{exchange}}:{{ticker}} | **Timeframe:** {{interval}} | **Price:** {{close}}\", \"embeds\": [{\"title\": \"{{exchange}}:{{ticker}} ({{interval}})\", \"image\": {\"url\": \"https://api.chart-img.com/v2/tradingview/advanced-chart?symbol={{exchange}}:{{ticker}}&interval={{interval}}&theme=dark\"}}]}")
-alertcondition(alert_bearBOS,    title="Bearish BOS",               message="{\"content\": \"🔴 **Bearish BOS Detected!**\\n**Symbol:** {{exchange}}:{{ticker}} | **Timeframe:** {{interval}} | **Price:** {{close}}\", \"embeds\": [{\"title\": \"{{exchange}}:{{ticker}} ({{interval}})\", \"image\": {\"url\": \"https://api.chart-img.com/v2/tradingview/advanced-chart?symbol={{exchange}}:{{ticker}}&interval={{interval}}&theme=dark\"}}]}")
+alertcondition(MSS.bull_bos,     title="Bullish BOS",               message="{\"content\": \"🟢 **Bullish BOS Detected!**\\n**Symbol:** {{exchange}}:{{ticker}} | **Timeframe:** {{interval}} | **Price:** {{close}}\", \"embeds\": [{\"title\": \"{{exchange}}:{{ticker}} ({{interval}})\", \"image\": {\"url\": \"https://api.chart-img.com/v2/tradingview/advanced-chart?symbol={{exchange}}:{{ticker}}&interval={{interval}}&theme=dark\"}}]}")
+alertcondition(MSS.bear_bos,     title="Bearish BOS",               message="{\"content\": \"🔴 **Bearish BOS Detected!**\\n**Symbol:** {{exchange}}:{{ticker}} | **Timeframe:** {{interval}} | **Price:** {{close}}\", \"embeds\": [{\"title\": \"{{exchange}}:{{ticker}} ({{interval}})\", \"image\": {\"url\": \"https://api.chart-img.com/v2/tradingview/advanced-chart?symbol={{exchange}}:{{ticker}}&interval={{interval}}&theme=dark\"}}]}")
 
 alertcondition(MSS.bull_event,   title="Bullish MSS",               message="{\"content\": \"🟢 **Bullish MSS Detected!**\\n**Symbol:** {{exchange}}:{{ticker}} | **Timeframe:** {{interval}} | **Price:** {{close}}\", \"embeds\": [{\"title\": \"{{exchange}}:{{ticker}} ({{interval}})\", \"image\": {\"url\": \"https://api.chart-img.com/v2/tradingview/advanced-chart?symbol={{exchange}}:{{ticker}}&interval={{interval}}&theme=dark\"}}]}")
 alertcondition(MSS.bear_event,   title="Bearish MSS",               message="{\"content\": \"🔴 **Bearish MSS Detected!**\\n**Symbol:** {{exchange}}:{{ticker}} | **Timeframe:** {{interval}} | **Price:** {{close}}\", \"embeds\": [{\"title\": \"{{exchange}}:{{ticker}} ({{interval}})\", \"image\": {\"url\": \"https://api.chart-img.com/v2/tradingview/advanced-chart?symbol={{exchange}}:{{ticker}}&interval={{interval}}&theme=dark\"}}]}")
@@ -1187,9 +1190,9 @@ ob_tf_ok  = i_alert_ob  and (i_ob_all  or (i_ob_5m  and timeframe.period == '5')
 
 liq_tf_ok = i_alert_liq and (i_liq_all or (i_liq_5m and timeframe.period == '5') or (i_liq_15m and timeframe.period == '15') or (i_liq_30m and timeframe.period == '30') or (i_liq_1h and (timeframe.period == '60' or timeframe.period == '1H')) or (i_liq_4h and (timeframe.period == '240' or timeframe.period == '4H')) or (i_liq_1d and (timeframe.period == 'D' or timeframe.period == '1D')))
 
-if alert_bullBOS and bos_tf_ok
+if MSS.bull_bos and bos_tf_ok
     alert("{\"content\": \"🟢 **Bullish BOS** on " + syminfo.ticker + " (" + timeframe.period + ") at price " + str.tostring(close) + "\", \"embeds\": [{\"title\": \"" + syminfo.ticker + " (" + timeframe.period + ")\", \"image\": {\"url\": \"" + img_url + "\"}}]}", alert.freq_once_per_bar_close)
-if alert_bearBOS and bos_tf_ok
+if MSS.bear_bos and bos_tf_ok
     alert("{\"content\": \"🔴 **Bearish BOS** on " + syminfo.ticker + " (" + timeframe.period + ") at price " + str.tostring(close) + "\", \"embeds\": [{\"title\": \"" + syminfo.ticker + " (" + timeframe.period + ")\", \"image\": {\"url\": \"" + img_url + "\"}}]}", alert.freq_once_per_bar_close)
 
 if MSS.bull_event and mss_tf_ok
