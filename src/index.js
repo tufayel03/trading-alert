@@ -1150,7 +1150,7 @@ function renderAdminHTML(settings) {
       if (!settings.FVG.minPointsForex) settings.FVG.minPointsForex = {};
       if (!settings.FVG.minPointsGold) settings.FVG.minPointsGold = {};
 
-      ['5m', '15m', '1h', '4h', '1d'].forEach(tf => {
+      ['5m', '15m', '30m', '1h', '4h', '1d'].forEach(tf => {
         const forexVal = document.getElementById('forex_fvg_min_' + tf);
         if (forexVal) settings.FVG.minPointsForex[tf] = Number(forexVal.value);
 
