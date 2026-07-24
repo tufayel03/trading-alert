@@ -549,28 +549,51 @@ async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price
     titleWithPoints += ` (${gapPoints} Pts)`;
   }
 
-  let desc = `**Symbol:** \`${symbol.name}\`\n**Timeframe:** \`${timeframe}\`\n**Current Price:** \`${priceFormatted}\``;
+  const isBullish = eventTitle.includes("Bullish") || eventTitle.includes("Buyside");
+  const isFill = eventTitle.includes("Filled") || eventTitle.includes("Tapped");
+  const embedColor = isFill ? 0xF59E0B : (isBullish ? 0x10B981 : 0xEF4444);
+
+  const fields = [
+    { name: "📊 Asset", value: `\`${symbol.name}\``, inline: true },
+    { name: "⏱️ Timeframe", value: `\`${timeframe}\``, inline: true },
+    { name: "💵 Price", value: `\`${priceFormatted}\``, inline: true }
+  ];
+
   if (gapPoints !== null) {
     const pips = (gapPoints / 10).toFixed(1);
-    desc += `\n**FVG Gap Size:** \`${gapPoints} Points\` (\`${pips} Pips\`)`;
+    fields.push({ name: "📐 Imbalance Size", value: `\`${gapPoints} Pts\` (\`${pips} Pips\`)`, inline: true });
   }
-  desc += `\n**Time (Dhaka):** \`${dhakaTime}\`\n\n📈 [Open Live Chart on TradingView](${tradingViewUrl})`;
+
+  fields.push(
+    { name: "🕒 Dhaka Time", value: `\`${dhakaTime}\``, inline: true },
+    { name: "📈 Interactive Chart", value: `[Open Live Chart on TradingView](${tradingViewUrl})`, inline: false }
+  );
 
   const embed = {
     title: `🚨 ${titleWithPoints}`,
-    description: desc,
-    color: eventTitle.includes("Bullish") || eventTitle.includes("Taken") ? 0x00E6A1 : 0xE60400,
-    footer: { text: "TUF Capital" }
+    color: embedColor,
+    fields: fields,
+    footer: {
+      text: "TUF Capital — 24/7 Market Structure Engine",
+      icon_url: "https://raw.githubusercontent.com/tufayel03/trading-alert/main/icon.png"
+    },
+    timestamp: new Date().toISOString()
   };
 
   if (chartImgUrl) {
     embed.image = { url: chartImgUrl };
   }
 
+  const payload = {
+    username: "TUF Capital Bot",
+    avatar_url: "https://cdn-icons-png.flaticon.com/512/2583/2583151.png",
+    embeds: [embed]
+  };
+
   await fetch(webhookUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ embeds: [embed] })
+    body: JSON.stringify(payload)
   });
 }
 
