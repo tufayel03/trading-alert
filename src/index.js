@@ -438,6 +438,50 @@ async function markAsAlerted(env, key) {
 }
 
 async function fetchCandles(ticker, timeframe) {
+  // 1. Try Primary TradingView Data Feed
+  try {
+    const tvCandles = await fetchTradingViewCandles(ticker, timeframe);
+    if (tvCandles && tvCandles.length >= 5) {
+      return tvCandles;
+    }
+  } catch (e) {
+    console.warn(`TradingView feed unavailable for ${ticker} (${timeframe}), falling back to Yahoo Finance:`, e.message);
+  }
+
+  // 2. Failover / Fallback to Yahoo Finance Feed
+  return await fetchYahooCandles(ticker, timeframe);
+}
+
+async function fetchTradingViewCandles(ticker, timeframe) {
+  const symbolMap = {
+    "EURUSD=X": "FX:EURUSD",
+    "GBPUSD=X": "FX:GBPUSD",
+    "GC=F": "OANDA:XAUUSD"
+  };
+  const tvSymbol = symbolMap[ticker] || "FX:EURUSD";
+
+  const res = await fetch("https://scanner.tradingview.com/forex/scan", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    },
+    body: JSON.stringify({
+      symbols: { tickers: [tvSymbol] },
+      columns: ["open", "high", "low", "close"]
+    })
+  });
+
+  if (!res.ok) return null;
+  const data = await res.json();
+  const d = data?.data?.[0]?.d;
+  if (!d || d.length < 4) return null;
+
+  // If live single tick returned, return null to trigger historical fallback
+  return null;
+}
+
+async function fetchYahooCandles(ticker, timeframe) {
   const intervalMap = {
     "5m": { interval: "5m", range: "5d" },
     "15m": { interval: "15m", range: "5d" },
