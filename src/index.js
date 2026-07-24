@@ -264,32 +264,47 @@ async function scanAll(env) {
               }
             }
           }
-        }
-
-        // 2. FVG Fill Detection
+          // 2. FVG Fill Detection (Dynamic stateless scan)
         if (CONFIG.FVGFill?.enabled && CONFIG.FVGFill.timeframes.includes(tf)) {
-          const bullFvgKey = `${sym.ticker}_${tf}_BULL_FVG_LEVEL`;
-          const activeBullFvg = activeFvgs.get(bullFvgKey);
-          if (activeBullFvg && closedBar.timestamp > activeBullFvg.timestamp) {
-            if (closedBar.low <= activeBullFvg.top) {
-              const fillKey = `${sym.ticker}_${tf}_BULL_FVG_FILLED_${activeBullFvg.timestamp}`;
-              if (!(await isAlreadyAlerted(env, fillKey))) {
-                await markAsAlerted(env, fillKey);
-                await sendDiscordEmbed(webhookUrl, "🎯 Bullish FVG Filled / Tapped", sym, tf, currentPrice, activeBullFvg.gapPoints, chartImgUrl);
-                activeFvgs.delete(bullFvgKey);
+          const reqMinPoints = Number(
+            isGold
+              ? (CONFIG.FVG?.minPointsGold?.[tf] ?? 300)
+              : (CONFIG.FVG?.minPointsForex?.[tf] ?? 100)
+          );
+
+          for (let i = candles.length - 4; i >= Math.max(3, candles.length - 20); i--) {
+            const c = candles[i];
+            const cPrev2 = candles[i - 2];
+
+            // Bullish FVG Fill check
+            if (c.low > cPrev2.high) {
+              const gapPoints = Math.round((c.low - cPrev2.high) * pointMultiplier);
+              if (gapPoints >= reqMinPoints) {
+                const fvgTop = c.low;
+                if (closedBar.low <= fvgTop && closedBar.timestamp > c.timestamp) {
+                  const fillKey = `${sym.ticker}_${tf}_BULL_FVG_FILL_${c.timestamp}`;
+                  if (!(await isAlreadyAlerted(env, fillKey))) {
+                    await markAsAlerted(env, fillKey);
+                    await sendDiscordEmbed(webhookUrl, "🎯 Bullish FVG Filled / Tapped", sym, tf, currentPrice, gapPoints, chartImgUrl);
+                    break;
+                  }
+                }
               }
             }
-          }
 
-          const bearFvgKey = `${sym.ticker}_${tf}_BEAR_FVG_LEVEL`;
-          const activeBearFvg = activeFvgs.get(bearFvgKey);
-          if (activeBearFvg && closedBar.timestamp > activeBearFvg.timestamp) {
-            if (closedBar.high >= activeBearFvg.bottom) {
-              const fillKey = `${sym.ticker}_${tf}_BEAR_FVG_FILLED_${activeBearFvg.timestamp}`;
-              if (!(await isAlreadyAlerted(env, fillKey))) {
-                await markAsAlerted(env, fillKey);
-                await sendDiscordEmbed(webhookUrl, "🎯 Bearish FVG Filled / Tapped", sym, tf, currentPrice, activeBearFvg.gapPoints, chartImgUrl);
-                activeFvgs.delete(bearFvgKey);
+            // Bearish FVG Fill check
+            if (c.high < cPrev2.low) {
+              const gapPoints = Math.round((cPrev2.low - c.high) * pointMultiplier);
+              if (gapPoints >= reqMinPoints) {
+                const fvgBottom = c.high;
+                if (closedBar.high >= fvgBottom && closedBar.timestamp > c.timestamp) {
+                  const fillKey = `${sym.ticker}_${tf}_BEAR_FVG_FILL_${c.timestamp}`;
+                  if (!(await isAlreadyAlerted(env, fillKey))) {
+                    await markAsAlerted(env, fillKey);
+                    await sendDiscordEmbed(webhookUrl, "🎯 Bearish FVG Filled / Tapped", sym, tf, currentPrice, gapPoints, chartImgUrl);
+                    break;
+                  }
+                }
               }
             }
           }
@@ -355,7 +370,28 @@ async function scanAll(env) {
           }
         }
 
-        // 5. Liquidity Sweep Detection
+        // 5. Order Block (OB) Detection
+        if (CONFIG.OB?.enabled && CONFIG.OB.timeframes.includes(tf)) {
+          // Bullish OB: barTwoBefore is bearish (close < open) and closedBar strongly closes above barTwoBefore high
+          if (barTwoBefore.close < barTwoBefore.open && closedBar.close > barTwoBefore.high && closedBar.close > closedBar.open) {
+            const key = `${sym.ticker}_${tf}_BULL_OB_${timestamp}`;
+            if (!(await isAlreadyAlerted(env, key))) {
+              await markAsAlerted(env, key);
+              await sendDiscordEmbed(webhookUrl, "🟢 Bullish Order Block (+OB) Formed", sym, tf, currentPrice, null, chartImgUrl);
+            }
+          }
+
+          // Bearish OB: barTwoBefore is bullish (close > open) and closedBar strongly closes below barTwoBefore low
+          if (barTwoBefore.close > barTwoBefore.open && closedBar.close < barTwoBefore.low && closedBar.close < closedBar.open) {
+            const key = `${sym.ticker}_${tf}_BEAR_OB_${timestamp}`;
+            if (!(await isAlreadyAlerted(env, key))) {
+              await markAsAlerted(env, key);
+              await sendDiscordEmbed(webhookUrl, "🔴 Bearish Order Block (-OB) Formed", sym, tf, currentPrice, null, chartImgUrl);
+            }
+          }
+        }
+
+        // 6. Liquidity Sweep Detection
         if (CONFIG.Liquidity?.enabled && CONFIG.Liquidity.timeframes.includes(tf)) {
           const pivotHigh = getPivotHigh(candles);
           const pivotLow = getPivotLow(candles);
