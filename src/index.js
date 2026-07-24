@@ -264,7 +264,9 @@ async function scanAll(env) {
               }
             }
           }
-          // 2. FVG Fill Detection (Dynamic stateless scan)
+        }
+
+        // 2. FVG Fill Detection (Dynamic stateless scan)
         if (CONFIG.FVGFill?.enabled && CONFIG.FVGFill.timeframes.includes(tf)) {
           const reqMinPoints = Number(
             isGold
