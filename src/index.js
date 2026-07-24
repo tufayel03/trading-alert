@@ -263,72 +263,93 @@ async function scanAll(env) {
 
         // 3. BOS (Break of Structure) Detection
         if (CONFIG.BOS?.enabled && CONFIG.BOS.timeframes.includes(tf)) {
-          const recentHighs = candles.slice(-10, -2).map(c => c.high);
-          const recentLows = candles.slice(-10, -2).map(c => c.low);
-          const swingHigh = Math.max(...recentHighs);
-          const swingLow = Math.min(...recentLows);
+          // Look at prior swing structure (excluding current 2 closed bars)
+          const priorCandles = candles.slice(-15, -3);
+          if (priorCandles.length >= 3) {
+            const swingHigh = Math.max(...priorCandles.map(c => c.high));
+            const swingLow = Math.min(...priorCandles.map(c => c.low));
 
-          if (closedBar.close > swingHigh && barBefore.close <= swingHigh) {
-            const key = `${sym.ticker}_${tf}_BULL_BOS_${timestamp}`;
-            if (!(await isAlreadyAlerted(env, key))) {
-              await markAsAlerted(env, key);
-              await sendDiscordEmbed(webhookUrl, "🟢 Bullish BOS (Break of Structure)", sym, tf, currentPrice, null, chartImgUrl);
+            // Check if closedBar or barBefore broke structure
+            const isBullishBos = (closedBar.close > swingHigh && barBefore.close <= swingHigh) ||
+                                 (barBefore.close > swingHigh && barTwoBefore.close <= swingHigh);
+            
+            const isBearishBos = (closedBar.close < swingLow && barBefore.close >= swingLow) ||
+                                 (barBefore.close < swingLow && barTwoBefore.close >= swingLow);
+
+            if (isBullishBos) {
+              const bosBar = closedBar.close > swingHigh ? closedBar : barBefore;
+              const key = `${sym.ticker}_${tf}_BULL_BOS_${bosBar.timestamp}`;
+              if (!(await isAlreadyAlerted(env, key))) {
+                await markAsAlerted(env, key);
+                await sendDiscordEmbed(webhookUrl, "🟢 Bullish BOS (Break of Structure)", sym, tf, currentPrice, null, chartImgUrl);
+              }
             }
-          }
 
-          if (closedBar.close < swingLow && barBefore.close >= swingLow) {
-            const key = `${sym.ticker}_${tf}_BEAR_BOS_${timestamp}`;
-            if (!(await isAlreadyAlerted(env, key))) {
-              await markAsAlerted(env, key);
-              await sendDiscordEmbed(webhookUrl, "🔴 Bearish BOS (Break of Structure)", sym, tf, currentPrice, null, chartImgUrl);
+            if (isBearishBos) {
+              const bosBar = closedBar.close < swingLow ? closedBar : barBefore;
+              const key = `${sym.ticker}_${tf}_BEAR_BOS_${bosBar.timestamp}`;
+              if (!(await isAlreadyAlerted(env, key))) {
+                await markAsAlerted(env, key);
+                await sendDiscordEmbed(webhookUrl, "🔴 Bearish BOS (Break of Structure)", sym, tf, currentPrice, null, chartImgUrl);
+              }
             }
           }
         }
 
         // 4. MSS Detection
         if (CONFIG.MSS?.enabled && CONFIG.MSS.timeframes.includes(tf)) {
-          const recentHighs = candles.slice(-12, -3).map(c => c.high);
-          const recentLows = candles.slice(-12, -3).map(c => c.low);
-          const swingHigh = Math.max(...recentHighs);
-          const swingLow = Math.min(...recentLows);
+          const priorCandles = candles.slice(-15, -3);
+          if (priorCandles.length >= 3) {
+            const swingHigh = Math.max(...priorCandles.map(c => c.high));
+            const swingLow = Math.min(...priorCandles.map(c => c.low));
 
-          if (closedBar.close > swingHigh && barBefore.close <= swingHigh) {
-            const key = `${sym.ticker}_${tf}_BULL_MSS_${timestamp}`;
-            if (!(await isAlreadyAlerted(env, key))) {
-              await markAsAlerted(env, key);
-              await sendDiscordEmbed(webhookUrl, "🟢 Bullish MSS Breakout", sym, tf, currentPrice, null, chartImgUrl);
+            const isBullishMss = (closedBar.close > swingHigh && barBefore.close <= swingHigh) ||
+                                 (barBefore.close > swingHigh && barTwoBefore.close <= swingHigh);
+            
+            const isBearishMss = (closedBar.close < swingLow && barBefore.close >= swingLow) ||
+                                 (barBefore.close < swingLow && barTwoBefore.close >= swingLow);
+
+            if (isBullishMss) {
+              const mssBar = closedBar.close > swingHigh ? closedBar : barBefore;
+              const key = `${sym.ticker}_${tf}_BULL_MSS_${mssBar.timestamp}`;
+              if (!(await isAlreadyAlerted(env, key))) {
+                await markAsAlerted(env, key);
+                await sendDiscordEmbed(webhookUrl, "🟢 Bullish MSS Breakout", sym, tf, currentPrice, null, chartImgUrl);
+              }
             }
-          }
 
-          if (closedBar.close < swingLow && barBefore.close >= swingLow) {
-            const key = `${sym.ticker}_${tf}_BEAR_MSS_${timestamp}`;
-            if (!(await isAlreadyAlerted(env, key))) {
-              await markAsAlerted(env, key);
-              await sendDiscordEmbed(webhookUrl, "🔴 Bearish MSS Breakdown", sym, tf, currentPrice, null, chartImgUrl);
+            if (isBearishMss) {
+              const mssBar = closedBar.close < swingLow ? closedBar : barBefore;
+              const key = `${sym.ticker}_${tf}_BEAR_MSS_${mssBar.timestamp}`;
+              if (!(await isAlreadyAlerted(env, key))) {
+                await markAsAlerted(env, key);
+                await sendDiscordEmbed(webhookUrl, "🔴 Bearish MSS Breakdown", sym, tf, currentPrice, null, chartImgUrl);
+              }
             }
           }
         }
 
         // 5. Liquidity Sweep Detection
         if (CONFIG.Liquidity?.enabled && CONFIG.Liquidity.timeframes.includes(tf)) {
-          const recentHighs = candles.slice(-15, -3).map(c => c.high);
-          const recentLows = candles.slice(-15, -3).map(c => c.low);
-          const swingHigh = Math.max(...recentHighs);
-          const swingLow = Math.min(...recentLows);
+          const priorCandles = candles.slice(-15, -3);
+          if (priorCandles.length >= 3) {
+            const swingHigh = Math.max(...priorCandles.map(c => c.high));
+            const swingLow = Math.min(...priorCandles.map(c => c.low));
 
-          if (closedBar.high > swingHigh && closedBar.close < swingHigh) {
-            const key = `${sym.ticker}_${tf}_BSL_SWEEP_${timestamp}`;
-            if (!(await isAlreadyAlerted(env, key))) {
-              await markAsAlerted(env, key);
-              await sendDiscordEmbed(webhookUrl, "💥 Buyside Liquidity Swept", sym, tf, currentPrice, null, chartImgUrl);
+            if (closedBar.high > swingHigh && closedBar.close < swingHigh) {
+              const key = `${sym.ticker}_${tf}_BSL_SWEEP_${timestamp}`;
+              if (!(await isAlreadyAlerted(env, key))) {
+                await markAsAlerted(env, key);
+                await sendDiscordEmbed(webhookUrl, "💥 Buyside Liquidity Swept", sym, tf, currentPrice, null, chartImgUrl);
+              }
             }
-          }
 
-          if (closedBar.low < swingLow && closedBar.close > swingLow) {
-            const key = `${sym.ticker}_${tf}_SSL_SWEEP_${timestamp}`;
-            if (!(await isAlreadyAlerted(env, key))) {
-              await markAsAlerted(env, key);
-              await sendDiscordEmbed(webhookUrl, "💥 Sellside Liquidity Swept", sym, tf, currentPrice, null, chartImgUrl);
+            if (closedBar.low < swingLow && closedBar.close > swingLow) {
+              const key = `${sym.ticker}_${tf}_SSL_SWEEP_${timestamp}`;
+              if (!(await isAlreadyAlerted(env, key))) {
+                await markAsAlerted(env, key);
+                await sendDiscordEmbed(webhookUrl, "💥 Sellside Liquidity Swept", sym, tf, currentPrice, null, chartImgUrl);
+              }
             }
           }
         }
