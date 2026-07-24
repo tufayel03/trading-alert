@@ -18,41 +18,55 @@ i_mode        = input.string(         'Present'      , title = 'Mode'           
 //Discord Alerts Settings
 i_discord_url = input.string(         ''              , title = 'Discord Webhook URL'    , group = 'Discord Webhook Configuration', tooltip = 'Paste your Discord Webhook URL here for quick reference. Note: TradingView also requires pasting this URL into the Alert creation -> Notifications tab.')
 
-// --- 1. MSS TIMEFRAME FILTERS ---
-i_alert_mss   = input.bool  (         true            , title = 'Enable MSS Alerts'      , group = '1. MSS Timeframe Selection')
-i_mss_all     = input.bool  (         true            , title = '  Allow ALL Timeframes for MSS', group = '1. MSS Timeframe Selection')
-i_mss_5m      = input.bool  (         true            , title = '  5m for MSS'           , group = '1. MSS Timeframe Selection')
-i_mss_15m     = input.bool  (         true            , title = '  15m for MSS'          , group = '1. MSS Timeframe Selection')
-i_mss_1h      = input.bool  (         true            , title = '  1h for MSS'           , group = '1. MSS Timeframe Selection')
-i_mss_4h      = input.bool  (         true            , title = '  4h for MSS'           , group = '1. MSS Timeframe Selection')
-i_mss_1d      = input.bool  (         true            , title = '  1D for MSS'           , group = '1. MSS Timeframe Selection')
+// --- 1. BOS TIMEFRAME FILTERS ---
+i_alert_bos   = input.bool  (         true            , title = 'Enable BOS Alerts'      , group = '1. BOS Timeframe Selection')
+i_bos_all     = input.bool  (         true            , title = '  Allow ALL Timeframes for BOS', group = '1. BOS Timeframe Selection')
+i_bos_5m      = input.bool  (         true            , title = '  5m for BOS'           , group = '1. BOS Timeframe Selection')
+i_bos_15m     = input.bool  (         true            , title = '  15m for BOS'          , group = '1. BOS Timeframe Selection')
+i_bos_30m     = input.bool  (         true            , title = '  30m for BOS'          , group = '1. BOS Timeframe Selection')
+i_bos_1h      = input.bool  (         true            , title = '  1h for BOS'           , group = '1. BOS Timeframe Selection')
+i_bos_4h      = input.bool  (         true            , title = '  4h for BOS'           , group = '1. BOS Timeframe Selection')
+i_bos_1d      = input.bool  (         true            , title = '  1D for BOS'           , group = '1. BOS Timeframe Selection')
 
-// --- 2. FVG TIMEFRAME FILTERS ---
-i_alert_fvg   = input.bool  (         true            , title = 'Enable FVG Alerts'      , group = '2. FVG Timeframe Selection')
-i_fvg_all     = input.bool  (         true            , title = '  Allow ALL Timeframes for FVG', group = '2. FVG Timeframe Selection')
-i_fvg_5m      = input.bool  (         true            , title = '  5m for FVG'           , group = '2. FVG Timeframe Selection')
-i_fvg_15m     = input.bool  (         true            , title = '  15m for FVG'          , group = '2. FVG Timeframe Selection')
-i_fvg_1h      = input.bool  (         true            , title = '  1h for FVG'           , group = '2. FVG Timeframe Selection')
-i_fvg_4h      = input.bool  (         true            , title = '  4h for FVG'           , group = '2. FVG Timeframe Selection')
-i_fvg_1d      = input.bool  (         true            , title = '  1D for FVG'           , group = '2. FVG Timeframe Selection')
+// --- 2. MSS TIMEFRAME FILTERS ---
+i_alert_mss   = input.bool  (         true            , title = 'Enable MSS Alerts'      , group = '2. MSS Timeframe Selection')
+i_mss_all     = input.bool  (         true            , title = '  Allow ALL Timeframes for MSS', group = '2. MSS Timeframe Selection')
+i_mss_5m      = input.bool  (         true            , title = '  5m for MSS'           , group = '2. MSS Timeframe Selection')
+i_mss_15m     = input.bool  (         true            , title = '  15m for MSS'          , group = '2. MSS Timeframe Selection')
+i_mss_30m     = input.bool  (         true            , title = '  30m for MSS'          , group = '2. MSS Timeframe Selection')
+i_mss_1h      = input.bool  (         true            , title = '  1h for MSS'           , group = '2. MSS Timeframe Selection')
+i_mss_4h      = input.bool  (         true            , title = '  4h for MSS'           , group = '2. MSS Timeframe Selection')
+i_mss_1d      = input.bool  (         true            , title = '  1D for MSS'           , group = '2. MSS Timeframe Selection')
 
-// --- 3. OB TIMEFRAME FILTERS ---
-i_alert_ob    = input.bool  (         true            , title = 'Enable OB Alerts'       , group = '3. Order Block Timeframe Selection')
-i_ob_all      = input.bool  (         true            , title = '  Allow ALL Timeframes for OB', group = '3. Order Block Timeframe Selection')
-i_ob_5m       = input.bool  (         true            , title = '  5m for OB'            , group = '3. Order Block Timeframe Selection')
-i_ob_15m      = input.bool  (         true            , title = '  15m for OB'           , group = '3. Order Block Timeframe Selection')
-i_ob_1h       = input.bool  (         true            , title = '  1h for OB'            , group = '3. Order Block Timeframe Selection')
-i_ob_4h       = input.bool  (         true            , title = '  4h for OB'            , group = '3. Order Block Timeframe Selection')
-i_ob_1d       = input.bool  (         true            , title = '  1D for OB'            , group = '3. Order Block Timeframe Selection')
+// --- 3. FVG TIMEFRAME FILTERS ---
+i_alert_fvg   = input.bool  (         true            , title = 'Enable FVG Alerts'      , group = '3. FVG Timeframe Selection')
+i_fvg_all     = input.bool  (         true            , title = '  Allow ALL Timeframes for FVG', group = '3. FVG Timeframe Selection')
+i_fvg_5m      = input.bool  (         true            , title = '  5m for FVG'           , group = '3. FVG Timeframe Selection')
+i_fvg_15m     = input.bool  (         true            , title = '  15m for FVG'          , group = '3. FVG Timeframe Selection')
+i_fvg_30m     = input.bool  (         true            , title = '  30m for FVG'          , group = '3. FVG Timeframe Selection')
+i_fvg_1h      = input.bool  (         true            , title = '  1h for FVG'           , group = '3. FVG Timeframe Selection')
+i_fvg_4h      = input.bool  (         true            , title = '  4h for FVG'           , group = '3. FVG Timeframe Selection')
+i_fvg_1d      = input.bool  (         true            , title = '  1D for FVG'           , group = '3. FVG Timeframe Selection')
 
-// --- 4. LIQUIDITY TIMEFRAME FILTERS ---
-i_alert_liq   = input.bool  (         true            , title = 'Enable Liquidity Alerts', group = '4. Liquidity Sweep Timeframe Selection')
-i_liq_all     = input.bool  (         true            , title = '  Allow ALL Timeframes for Liquidity', group = '4. Liquidity Sweep Timeframe Selection')
-i_liq_5m      = input.bool  (         true            , title = '  5m for Liquidity'     , group = '4. Liquidity Sweep Timeframe Selection')
-i_liq_15m     = input.bool  (         true            , title = '  15m for Liquidity'    , group = '4. Liquidity Sweep Timeframe Selection')
-i_liq_1h      = input.bool  (         true            , title = '  1h for Liquidity'     , group = '4. Liquidity Sweep Timeframe Selection')
-i_liq_4h      = input.bool  (         true            , title = '  4h for Liquidity'     , group = '4. Liquidity Sweep Timeframe Selection')
-i_liq_1d      = input.bool  (         true            , title = '  1D for Liquidity'     , group = '4. Liquidity Sweep Timeframe Selection')
+// --- 4. OB TIMEFRAME FILTERS ---
+i_alert_ob    = input.bool  (         true            , title = 'Enable OB Alerts'       , group = '4. Order Block Timeframe Selection')
+i_ob_all      = input.bool  (         true            , title = '  Allow ALL Timeframes for OB', group = '4. Order Block Timeframe Selection')
+i_ob_5m       = input.bool  (         true            , title = '  5m for OB'            , group = '4. Order Block Timeframe Selection')
+i_ob_15m      = input.bool  (         true            , title = '  15m for OB'           , group = '4. Order Block Timeframe Selection')
+i_ob_30m      = input.bool  (         true            , title = '  30m for OB'           , group = '4. Order Block Timeframe Selection')
+i_ob_1h       = input.bool  (         true            , title = '  1h for OB'            , group = '4. Order Block Timeframe Selection')
+i_ob_4h       = input.bool  (         true            , title = '  4h for OB'            , group = '4. Order Block Timeframe Selection')
+i_ob_1d       = input.bool  (         true            , title = '  1D for OB'            , group = '4. Order Block Timeframe Selection')
+
+// --- 5. LIQUIDITY TIMEFRAME FILTERS ---
+i_alert_liq   = input.bool  (         true            , title = 'Enable Liquidity Alerts', group = '5. Liquidity Sweep Timeframe Selection')
+i_liq_all     = input.bool  (         true            , title = '  Allow ALL Timeframes for Liquidity', group = '5. Liquidity Sweep Timeframe Selection')
+i_liq_5m      = input.bool  (         true            , title = '  5m for Liquidity'     , group = '5. Liquidity Sweep Timeframe Selection')
+i_liq_15m     = input.bool  (         true            , title = '  15m for Liquidity'    , group = '5. Liquidity Sweep Timeframe Selection')
+i_liq_30m     = input.bool  (         true            , title = '  30m for Liquidity'    , group = '5. Liquidity Sweep Timeframe Selection')
+i_liq_1h      = input.bool  (         true            , title = '  1h for Liquidity'     , group = '5. Liquidity Sweep Timeframe Selection')
+i_liq_4h      = input.bool  (         true            , title = '  4h for Liquidity'     , group = '5. Liquidity Sweep Timeframe Selection')
+i_liq_1d      = input.bool  (         true            , title = '  1D for Liquidity'     , group = '5. Liquidity Sweep Timeframe Selection')
 
 //Market Structure Shift
 showMS     = input.bool  (           true         , title = ''                       ,   group = 'Market Structures', inline = 'MS'                                    )
@@ -241,6 +255,8 @@ var mss MSS = mss.new(
 //-----------------------------------------------------------------------------{
 maxVimb = 2
 
+var bool alert_bullBOS = false
+var bool alert_bearBOS = false
 var bool alert_buysideLiq = false
 var bool alert_sellsideLiq = false
 var bool alert_bullOB = false
@@ -535,18 +551,22 @@ draw(left, col) =>
                     if aZZ.y.get(iH) != MSS.l_bosBl.get(0).get_y2() and
                        aZZ.y.get(iH) != MSS.l_mssBl.get(0).get_y2()
                         MSS.l_bosBl.unshift(set_lin(iH, 'Bl')), MSS.lbBosBl.unshift(set_lab(iH, 'Bl'))
+                        alert_bullBOS := true
                 else  
                     if aZZ.y.get(iH) != MSS.l_mssBl.get(0).get_y2()                     
                         MSS.l_bosBl.unshift(set_lin(iH, 'Bl')), MSS.lbBosBl.unshift(set_lab(iH, 'Bl'))
+                        alert_bullBOS := true
             // BOS Bearish
             MSS.dir == -1 and close < aZZ.y.get(iL) and iBOS =>
                 if MSS.l_bosBr.size() > 0
                     if aZZ.y.get(iL) != MSS.l_bosBr.get(0).get_y2() and
                        aZZ.y.get(iL) != MSS.l_mssBr.get(0).get_y2()
                         MSS.l_bosBr.unshift(set_lin(iL, 'Br')), MSS.lbBosBr.unshift(set_lab(iL, 'Br'))
+                        alert_bearBOS := true
                 else
                     if aZZ.y.get(iL) != MSS.l_mssBr.get(0).get_y2()                     
                         MSS.l_bosBr.unshift(set_lin(iL, 'Br')), MSS.lbBosBr.unshift(set_lab(iL, 'Br'))
+                        alert_bearBOS := true
         if not iMSS
             MSS.l_mssBl.get(0).set_color(color(na)), MSS.lbMssBl.get(0).set_textcolor(color(na))
             MSS.l_mssBr.get(0).set_color(color(na)), MSS.lbMssBr.get(0).set_textcolor(color(na))
@@ -556,7 +576,10 @@ draw(left, col) =>
 //-----------------------------------------------------------------------------}
 //Calculations
 //-----------------------------------------------------------------------------{
+alert_bullBOS     := false
+alert_bearBOS     := false
 alert_buysideLiq  := false
+alert_sellsideLiq := false
 alert_sellsideLiq := false
 alert_bullOB      := false
 alert_bearOB      := false
@@ -1184,6 +1207,9 @@ alert_bearFVG = imbalanceDN and per and shwFVG and not imbalanceDN[1]
 img_url = "https://api.chart-img.com/v2/tradingview/advanced-chart?symbol=" + syminfo.prefix + ":" + syminfo.ticker + "&interval=" + timeframe.period + "&theme=dark"
 
 // Alert Conditions for TradingView UI Setup
+alertcondition(alert_bullBOS,    title="Bullish BOS",               message="{\"content\": \"🟢 **Bullish BOS Detected!**\\n**Symbol:** {{exchange}}:{{ticker}} | **Timeframe:** {{interval}} | **Price:** {{close}}\", \"embeds\": [{\"title\": \"{{exchange}}:{{ticker}} ({{interval}})\", \"image\": {\"url\": \"https://api.chart-img.com/v2/tradingview/advanced-chart?symbol={{exchange}}:{{ticker}}&interval={{interval}}&theme=dark\"}}]}")
+alertcondition(alert_bearBOS,    title="Bearish BOS",               message="{\"content\": \"🔴 **Bearish BOS Detected!**\\n**Symbol:** {{exchange}}:{{ticker}} | **Timeframe:** {{interval}} | **Price:** {{close}}\", \"embeds\": [{\"title\": \"{{exchange}}:{{ticker}} ({{interval}})\", \"image\": {\"url\": \"https://api.chart-img.com/v2/tradingview/advanced-chart?symbol={{exchange}}:{{ticker}}&interval={{interval}}&theme=dark\"}}]}")
+
 alertcondition(MSS.bull_event,   title="Bullish MSS",               message="{\"content\": \"🟢 **Bullish MSS Detected!**\\n**Symbol:** {{exchange}}:{{ticker}} | **Timeframe:** {{interval}} | **Price:** {{close}}\", \"embeds\": [{\"title\": \"{{exchange}}:{{ticker}} ({{interval}})\", \"image\": {\"url\": \"https://api.chart-img.com/v2/tradingview/advanced-chart?symbol={{exchange}}:{{ticker}}&interval={{interval}}&theme=dark\"}}]}")
 alertcondition(MSS.bear_event,   title="Bearish MSS",               message="{\"content\": \"🔴 **Bearish MSS Detected!**\\n**Symbol:** {{exchange}}:{{ticker}} | **Timeframe:** {{interval}} | **Price:** {{close}}\", \"embeds\": [{\"title\": \"{{exchange}}:{{ticker}} ({{interval}})\", \"image\": {\"url\": \"https://api.chart-img.com/v2/tradingview/advanced-chart?symbol={{exchange}}:{{ticker}}&interval={{interval}}&theme=dark\"}}]}")
 
@@ -1197,13 +1223,20 @@ alertcondition(alert_buysideLiq, title="Buyside Liquidity Taken",   message="{\"
 alertcondition(alert_sellsideLiq,title="Sellside Liquidity Taken",  message="{\"content\": \"💥 **Sellside Liquidity Swept/Taken!**\\n**Symbol:** {{exchange}}:{{ticker}} | **Timeframe:** {{interval}} | **Price:** {{close}}\", \"embeds\": [{\"title\": \"{{exchange}}:{{ticker}} ({{interval}})\", \"image\": {\"url\": \"https://api.chart-img.com/v2/tradingview/advanced-chart?symbol={{exchange}}:{{ticker}}&interval={{interval}}&theme=dark\"}}]}")
 
 // Dynamic Alert Trigger (For 'Any alert() call' condition in TradingView)
-mss_tf_ok = i_alert_mss and (i_mss_all or (i_mss_5m and timeframe.period == '5') or (i_mss_15m and timeframe.period == '15') or (i_mss_1h and (timeframe.period == '60' or timeframe.period == '1H')) or (i_mss_4h and (timeframe.period == '240' or timeframe.period == '4H')) or (i_mss_1d and (timeframe.period == 'D' or timeframe.period == '1D')))
+bos_tf_ok = i_alert_bos and (i_bos_all or (i_bos_5m and timeframe.period == '5') or (i_bos_15m and timeframe.period == '15') or (i_bos_30m and timeframe.period == '30') or (i_bos_1h and (timeframe.period == '60' or timeframe.period == '1H')) or (i_bos_4h and (timeframe.period == '240' or timeframe.period == '4H')) or (i_bos_1d and (timeframe.period == 'D' or timeframe.period == '1D')))
 
-fvg_tf_ok = i_alert_fvg and (i_fvg_all or (i_fvg_5m and timeframe.period == '5') or (i_fvg_15m and timeframe.period == '15') or (i_fvg_1h and (timeframe.period == '60' or timeframe.period == '1H')) or (i_fvg_4h and (timeframe.period == '240' or timeframe.period == '4H')) or (i_fvg_1d and (timeframe.period == 'D' or timeframe.period == '1D')))
+mss_tf_ok = i_alert_mss and (i_mss_all or (i_mss_5m and timeframe.period == '5') or (i_mss_15m and timeframe.period == '15') or (i_mss_30m and timeframe.period == '30') or (i_mss_1h and (timeframe.period == '60' or timeframe.period == '1H')) or (i_mss_4h and (timeframe.period == '240' or timeframe.period == '4H')) or (i_mss_1d and (timeframe.period == 'D' or timeframe.period == '1D')))
 
-ob_tf_ok  = i_alert_ob  and (i_ob_all  or (i_ob_5m  and timeframe.period == '5') or (i_ob_15m  and timeframe.period == '15') or (i_ob_1h  and (timeframe.period == '60' or timeframe.period == '1H')) or (i_ob_4h  and (timeframe.period == '240' or timeframe.period == '4H')) or (i_ob_1d  and (timeframe.period == 'D' or timeframe.period == '1D')))
+fvg_tf_ok = i_alert_fvg and (i_fvg_all or (i_fvg_5m and timeframe.period == '5') or (i_fvg_15m and timeframe.period == '15') or (i_fvg_30m and timeframe.period == '30') or (i_fvg_1h and (timeframe.period == '60' or timeframe.period == '1H')) or (i_fvg_4h and (timeframe.period == '240' or timeframe.period == '4H')) or (i_fvg_1d and (timeframe.period == 'D' or timeframe.period == '1D')))
 
-liq_tf_ok = i_alert_liq and (i_liq_all or (i_liq_5m and timeframe.period == '5') or (i_liq_15m and timeframe.period == '15') or (i_liq_1h and (timeframe.period == '60' or timeframe.period == '1H')) or (i_liq_4h and (timeframe.period == '240' or timeframe.period == '4H')) or (i_liq_1d and (timeframe.period == 'D' or timeframe.period == '1D')))
+ob_tf_ok  = i_alert_ob  and (i_ob_all  or (i_ob_5m  and timeframe.period == '5') or (i_ob_15m  and timeframe.period == '15') or (i_ob_30m  and timeframe.period == '30') or (i_ob_1h  and (timeframe.period == '60' or timeframe.period == '1H')) or (i_ob_4h  and (timeframe.period == '240' or timeframe.period == '4H')) or (i_ob_1d  and (timeframe.period == 'D' or timeframe.period == '1D')))
+
+liq_tf_ok = i_alert_liq and (i_liq_all or (i_liq_5m and timeframe.period == '5') or (i_liq_15m and timeframe.period == '15') or (i_liq_30m and timeframe.period == '30') or (i_liq_1h and (timeframe.period == '60' or timeframe.period == '1H')) or (i_liq_4h and (timeframe.period == '240' or timeframe.period == '4H')) or (i_liq_1d and (timeframe.period == 'D' or timeframe.period == '1D')))
+
+if alert_bullBOS and bos_tf_ok
+    alert("{\"content\": \"🟢 **Bullish BOS** on " + syminfo.ticker + " (" + timeframe.period + ") at price " + str.tostring(close) + "\", \"embeds\": [{\"title\": \"" + syminfo.ticker + " (" + timeframe.period + ")\", \"image\": {\"url\": \"" + img_url + "\"}}]}", alert.freq_once_per_bar_close)
+if alert_bearBOS and bos_tf_ok
+    alert("{\"content\": \"🔴 **Bearish BOS** on " + syminfo.ticker + " (" + timeframe.period + ") at price " + str.tostring(close) + "\", \"embeds\": [{\"title\": \"" + syminfo.ticker + " (" + timeframe.period + ")\", \"image\": {\"url\": \"" + img_url + "\"}}]}", alert.freq_once_per_bar_close)
 
 if MSS.bull_event and mss_tf_ok
     alert("{\"content\": \"🟢 **Bullish MSS** on " + syminfo.ticker + " (" + timeframe.period + ") at price " + str.tostring(close) + "\", \"embeds\": [{\"title\": \"" + syminfo.ticker + " (" + timeframe.period + ")\", \"image\": {\"url\": \"" + img_url + "\"}}]}", alert.freq_once_per_bar_close)

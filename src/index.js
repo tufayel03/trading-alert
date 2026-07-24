@@ -40,14 +40,33 @@ export default {
       try {
         const body = await request.json();
         const config = await getConfig(env);
-        const webhookUrl = config.discordWebhookUrl || DEFAULT_WEBHOOK;
+        const webhookUrl = config.discordWebhookUrl || env.DISCORD_WEBHOOK_URL || DEFAULT_WEBHOOK;
 
-        const symbol = body.symbol || "XAUUSD";
-        const timeframe = body.timeframe || "15m";
-        const message = body.message || "ICT Pattern Detected!";
-        const chartImg = body.image || body.chart_image || generateTradingViewChartUrl("OANDA:XAUUSD", timeframe, config.chartTheme || "light");
+        // If payload is already pre-formatted with content/embeds from Pine Script, forward directly to Discord
+        if (body.content || body.embeds) {
+          const discordRes = await fetch(webhookUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+          });
+          return new Response(JSON.stringify({ success: true, forwarded: true, status: discordRes.status }), {
+            headers: { "Content-Type": "application/json" }
+          });
+        }
 
-        await sendDiscordEmbed(webhookUrl, message, { name: symbol, tvSymbol: symbol, decimals: 2 }, timeframe, body.price || 4045.0, null, chartImg);
+        const symbolStr = body.symbol || body.ticker || "EURUSD";
+        const timeframe = body.timeframe || body.interval || "15m";
+        const message = body.message || body.title || "ICT Pattern Detected!";
+        const price = body.price || body.close || 0;
+        const chartImg = body.image || body.chart_image || generateTradingViewChartUrl(symbolStr, timeframe, config.chartTheme || "light");
+
+        const foundSym = SYMBOLS.find(s => s.name === symbolStr || s.ticker === symbolStr || s.tvSymbol.includes(symbolStr)) || {
+          name: symbolStr,
+          tvSymbol: symbolStr,
+          decimals: symbolStr.includes("XAU") || symbolStr.includes("GC") ? 2 : 5
+        };
+
+        await sendDiscordEmbed(webhookUrl, message, foundSym, timeframe, price, null, chartImg);
         return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
       } catch (e) {
         return new Response(JSON.stringify({ error: e.message }), { status: 400 });
