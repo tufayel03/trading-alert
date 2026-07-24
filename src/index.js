@@ -139,24 +139,24 @@ async function getConfig(env) {
   if (custom) {
     if (!custom.discordWebhookUrl) custom.discordWebhookUrl = fallbackWebhook;
     if (!custom.chartTheme) custom.chartTheme = "light";
-    if (!custom.BOS) custom.BOS = { enabled: true, timeframes: ["15m", "1h", "4h"] };
+    if (!custom.BOS) custom.BOS = { enabled: true, timeframes: ["15m", "30m", "1h", "4h"] };
     return custom;
   }
 
   return {
     discordWebhookUrl: fallbackWebhook,
     chartTheme: "light",
-    BOS: { enabled: true, timeframes: ["15m", "1h", "4h"] },
-    MSS: { enabled: env.ENABLE_MSS !== "false", timeframes: parseTf(env.MSS_TIMEFRAMES, ["1h", "4h"]) },
+    BOS: { enabled: true, timeframes: ["15m", "30m", "1h", "4h"] },
+    MSS: { enabled: env.ENABLE_MSS !== "false", timeframes: parseTf(env.MSS_TIMEFRAMES, ["15m", "30m", "1h", "4h"]) },
     FVG: {
       enabled: env.ENABLE_FVG !== "false",
-      timeframes: parseTf(env.FVG_TIMEFRAMES, ["15m", "1h"]),
-      minPointsForex: { "5m": 50, "15m": 100, "1h": 200, "4h": 500, "1d": 1000 },
-      minPointsGold: { "5m": 100, "15m": 300, "1h": 500, "4h": 1000, "1d": 2000 }
+      timeframes: parseTf(env.FVG_TIMEFRAMES, ["15m", "30m", "1h"]),
+      minPointsForex: { "5m": 50, "15m": 100, "30m": 150, "1h": 200, "4h": 500, "1d": 1000 },
+      minPointsGold: { "5m": 100, "15m": 300, "30m": 400, "1h": 500, "4h": 1000, "1d": 2000 }
     },
-    FVGFill: { enabled: env.ENABLE_FVG_FILL !== "false", timeframes: parseTf(env.FVG_FILL_TIMEFRAMES, ["15m", "1h"]) },
-    OB: { enabled: env.ENABLE_OB !== "false", timeframes: parseTf(env.OB_TIMEFRAMES, ["1h", "4h"]) },
-    Liquidity: { enabled: env.ENABLE_LIQUIDITY !== "false", timeframes: parseTf(env.LIQUIDITY_TIMEFRAMES, ["15m", "1h", "4h"]) }
+    FVGFill: { enabled: env.ENABLE_FVG_FILL !== "false", timeframes: parseTf(env.FVG_FILL_TIMEFRAMES, ["15m", "30m", "1h"]) },
+    OB: { enabled: env.ENABLE_OB !== "false", timeframes: parseTf(env.OB_TIMEFRAMES, ["15m", "30m", "1h", "4h"]) },
+    Liquidity: { enabled: env.ENABLE_LIQUIDITY !== "false", timeframes: parseTf(env.LIQUIDITY_TIMEFRAMES, ["15m", "30m", "1h", "4h"]) }
   };
 }
 
@@ -380,6 +380,7 @@ async function fetchCandles(ticker, timeframe) {
   const intervalMap = {
     "5m": { interval: "5m", range: "5d" },
     "15m": { interval: "15m", range: "5d" },
+    "30m": { interval: "30m", range: "5d" },
     "1h": { interval: "60m", range: "1mo" },
     "4h": { interval: "60m", range: "3mo" },
     "1d": { interval: "1d", range: "6mo" }
@@ -416,7 +417,7 @@ async function fetchCandles(ticker, timeframe) {
 }
 
 function generateTradingViewChartUrl(tvSymbol, timeframe, theme = "light") {
-  const tfMap = { "5m": "5", "15m": "15", "1h": "60", "4h": "240", "1d": "D" };
+  const tfMap = { "5m": "5", "15m": "15", "30m": "30", "1h": "60", "4h": "240", "1d": "D" };
   const interval = tfMap[timeframe] || "15";
   const widgetUrl = `https://s.tradingview.com/widgetembed/?symbol=${encodeURIComponent(tvSymbol)}&interval=${interval}&theme=${theme}&hide_volume=true`;
   return `https://api.microlink.io/?url=${encodeURIComponent(widgetUrl)}&screenshot=true&embed=screenshot.url`;
@@ -478,9 +479,9 @@ function renderAdminHTML(settings) {
     { key: "Liquidity", name: "Liquidity Sweeps", desc: "Buyside & Sellside liquidity pool sweeps" }
   ];
   
-  const allTfs = ["5m", "15m", "1h", "4h", "1d"];
-  const forexMinPoints = settings.FVG?.minPointsForex || { "5m": 50, "15m": 100, "1h": 200, "4h": 500, "1d": 1000 };
-  const goldMinPoints = settings.FVG?.minPointsGold || { "5m": 100, "15m": 300, "1h": 500, "4h": 1000, "1d": 2000 };
+  const allTfs = ["5m", "15m", "30m", "1h", "4h", "1d"];
+  const forexMinPoints = settings.FVG?.minPointsForex || { "5m": 50, "15m": 100, "30m": 150, "1h": 200, "4h": 500, "1d": 1000 };
+  const goldMinPoints = settings.FVG?.minPointsGold || { "5m": 100, "15m": 300, "30m": 400, "1h": 500, "4h": 1000, "1d": 2000 };
   const chartTheme = settings.chartTheme || "light";
 
   return `<!DOCTYPE html>
@@ -830,7 +831,7 @@ function renderAdminHTML(settings) {
 
     .points-grid {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(6, 1fr);
       gap: 8px;
     }
 
