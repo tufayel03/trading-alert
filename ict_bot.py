@@ -177,126 +177,124 @@ def scan_symbol(symbol_info, config, state):
             if df is None or len(df) < 5:
                 continue
 
-            latest_idx = df.index[-1]
-            price = df['Close'].iloc[-1]
-            timestamp_str = str(latest_idx)
+            # Use last CLOSED bar (iloc[-2]) and prior bars (iloc[-3], iloc[-4]) for confirmed signals
+            closed_idx = df.index[-2]
+            price = df['Close'].iloc[-2]
+            timestamp_str = str(closed_idx)
 
-            # 1. FVG Detection
+            closed_open  = df['Open'].iloc[-2]
+            closed_high  = df['High'].iloc[-2]
+            closed_low   = df['Low'].iloc[-2]
+            closed_close = df['Close'].iloc[-2]
+
+            prev_close   = df['Close'].iloc[-3]
+            bar2b_open   = df['Open'].iloc[-4]
+            bar2b_close  = df['Close'].iloc[-4]
+            bar2b_high   = df['High'].iloc[-4]
+            bar2b_low    = df['Low'].iloc[-4]
+
+            # 1. FVG Detection (on closed bar iloc[-2] vs iloc[-4])
             if settings.get("FVG", {}).get("enabled") and tf in settings["FVG"].get("timeframes", []):
-                low_curr = df['Low'].iloc[-1]
-                high_prev2 = df['High'].iloc[-3]
-                if low_curr > high_prev2:
+                if closed_low > bar2b_high:
                     alert_key = f"{ticker}_{tf}_BULL_FVG_{timestamp_str}"
                     if not state.get(alert_key):
                         chart = generate_chart_image(df, f"🟢 Bullish FVG - {name} ({tf})")
                         send_discord_alert(webhook_url, "🟢 Bullish FVG Formed", name, tf, price, chart)
                         state[alert_key] = True
 
-                high_curr = df['High'].iloc[-1]
-                low_prev2 = df['Low'].iloc[-3]
-                if high_curr < low_prev2:
+                if closed_high < bar2b_low:
                     alert_key = f"{ticker}_{tf}_BEAR_FVG_{timestamp_str}"
                     if not state.get(alert_key):
                         chart = generate_chart_image(df, f"🔴 Bearish FVG - {name} ({tf})")
                         send_discord_alert(webhook_url, "🔴 Bearish FVG Formed", name, tf, price, chart)
                         state[alert_key] = True
 
-            # 2. BOS Detection
+            # 2. BOS Detection (on closed bar)
             if settings.get("BOS", {}).get("enabled") and tf in settings["BOS"].get("timeframes", []):
                 highs = df['High']
                 lows = df['Low']
-                closes = df['Close']
                 
-                swing_high = highs.iloc[-15:-3].max()
-                swing_low = lows.iloc[-15:-3].min()
+                swing_high = highs.iloc[-20:-4].max()
+                swing_low  = lows.iloc[-20:-4].min()
 
-                if closes.iloc[-1] > swing_high and closes.iloc[-2] <= swing_high:
+                if closed_close > swing_high and prev_close <= swing_high:
                     alert_key = f"{ticker}_{tf}_BULL_BOS_{timestamp_str}"
                     if not state.get(alert_key):
                         chart = generate_chart_image(df, f"🟢 Bullish BOS - {name} ({tf})")
                         send_discord_alert(webhook_url, "🟢 Bullish BOS (Break of Structure)", name, tf, price, chart)
                         state[alert_key] = True
 
-                if closes.iloc[-1] < swing_low and closes.iloc[-2] >= swing_low:
+                if closed_close < swing_low and prev_close >= swing_low:
                     alert_key = f"{ticker}_{tf}_BEAR_BOS_{timestamp_str}"
                     if not state.get(alert_key):
                         chart = generate_chart_image(df, f"🔴 Bearish BOS - {name} ({tf})")
                         send_discord_alert(webhook_url, "🔴 Bearish BOS (Break of Structure)", name, tf, price, chart)
                         state[alert_key] = True
 
-            # 3. MSS Detection
+            # 3. MSS Detection (on closed bar)
             if settings.get("MSS", {}).get("enabled") and tf in settings["MSS"].get("timeframes", []):
                 highs = df['High']
                 lows = df['Low']
-                closes = df['Close']
                 
-                swing_high = highs.iloc[-15:-3].max()
-                swing_low = lows.iloc[-15:-3].min()
+                swing_high = highs.iloc[-20:-4].max()
+                swing_low  = lows.iloc[-20:-4].min()
 
-                if closes.iloc[-1] > swing_high and closes.iloc[-2] <= swing_high:
+                if closed_close > swing_high and prev_close <= swing_high:
                     alert_key = f"{ticker}_{tf}_BULL_MSS_{timestamp_str}"
                     if not state.get(alert_key):
                         chart = generate_chart_image(df, f"🟢 Bullish MSS - {name} ({tf})")
                         send_discord_alert(webhook_url, "🟢 Bullish MSS Breakout", name, tf, price, chart)
                         state[alert_key] = True
 
-                if closes.iloc[-1] < swing_low and closes.iloc[-2] >= swing_low:
+                if closed_close < swing_low and prev_close >= swing_low:
                     alert_key = f"{ticker}_{tf}_BEAR_MSS_{timestamp_str}"
                     if not state.get(alert_key):
                         chart = generate_chart_image(df, f"🔴 Bearish MSS - {name} ({tf})")
                         send_discord_alert(webhook_url, "🔴 Bearish MSS Breakdown", name, tf, price, chart)
                         state[alert_key] = True
 
-            # 3. Liquidity Sweep Detection
+            # 4. Liquidity Sweep Detection (closed bar sweeps pivot)
             if settings.get("Liquidity", {}).get("enabled") and tf in settings["Liquidity"].get("timeframes", []):
-                swing_high = df['High'].iloc[-15:-2].max()
-                swing_low = df['Low'].iloc[-15:-2].min()
+                swing_high = df['High'].iloc[-20:-4].max()
+                swing_low  = df['Low'].iloc[-20:-4].min()
 
-                if df['High'].iloc[-1] > swing_high and df['Close'].iloc[-1] < swing_high:
+                if closed_high > swing_high and closed_close < swing_high:
                     alert_key = f"{ticker}_{tf}_BSL_SWEEP_{timestamp_str}"
                     if not state.get(alert_key):
                         chart = generate_chart_image(df, f"💥 Buyside Liquidity Swept - {name} ({tf})")
                         send_discord_alert(webhook_url, "💥 Buyside Liquidity Swept", name, tf, price, chart)
                         state[alert_key] = True
 
-                if df['Low'].iloc[-1] < swing_low and df['Close'].iloc[-1] > swing_low:
+                if closed_low < swing_low and closed_close > swing_low:
                     alert_key = f"{ticker}_{tf}_SSL_SWEEP_{timestamp_str}"
                     if not state.get(alert_key):
                         chart = generate_chart_image(df, f"💥 Sellside Liquidity Swept - {name} ({tf})")
                         send_discord_alert(webhook_url, "💥 Sellside Liquidity Swept", name, tf, price, chart)
                         state[alert_key] = True
 
-            # 5. Order Block (OB) Detection
+            # 5. Order Block (OB) Detection (on closed bar iloc[-2] vs iloc[-4])
             if settings.get("OB", {}).get("enabled") and tf in settings["OB"].get("timeframes", []):
-                open_2b = df['Open'].iloc[-3]
-                close_2b = df['Close'].iloc[-3]
-                high_2b = df['High'].iloc[-3]
-                low_2b = df['Low'].iloc[-3]
-
-                curr_open = df['Open'].iloc[-1]
-                curr_close = df['Close'].iloc[-1]
-
-                if close_2b < open_2b and curr_close > high_2b and curr_close > curr_open:
+                if bar2b_close < bar2b_open and closed_close > bar2b_high and closed_close > closed_open:
                     alert_key = f"{ticker}_{tf}_BULL_OB_{timestamp_str}"
                     if not state.get(alert_key):
                         chart = generate_chart_image(df, f"🟢 Bullish OB - {name} ({tf})")
                         send_discord_alert(webhook_url, "🟢 Bullish Order Block (+OB) Formed", name, tf, price, chart)
                         state[alert_key] = True
 
-                if close_2b > open_2b and curr_close < low_2b and curr_close < curr_open:
+                if bar2b_close > bar2b_open and closed_close < bar2b_low and closed_close < closed_open:
                     alert_key = f"{ticker}_{tf}_BEAR_OB_{timestamp_str}"
                     if not state.get(alert_key):
                         chart = generate_chart_image(df, f"🔴 Bearish OB - {name} ({tf})")
                         send_discord_alert(webhook_url, "🔴 Bearish Order Block (-OB) Formed", name, tf, price, chart)
                         state[alert_key] = True
 
-            # 6. FVG Fill Detection
+            # 6. FVG Fill Detection (closed bar taps previous FVG)
             if settings.get("FVGFill", {}).get("enabled") and tf in settings["FVGFill"].get("timeframes", []):
-                for i in range(len(df) - 4, max(2, len(df) - 15), -1):
+                for i in range(len(df) - 5, max(2, len(df) - 20), -1):
                     low_c = df['Low'].iloc[i]
-                    high_prev2 = df['High'].iloc[i - 2]
-                    if low_c > high_prev2:
-                        if df['Low'].iloc[-1] <= low_c:
+                    high_p2 = df['High'].iloc[i - 2]
+                    if low_c > high_p2:
+                        if closed_low <= low_c:
                             alert_key = f"{ticker}_{tf}_BULL_FVG_FILL_{str(df.index[i])}"
                             if not state.get(alert_key):
                                 chart = generate_chart_image(df, f"🎯 Bullish FVG Filled - {name} ({tf})")
@@ -305,9 +303,9 @@ def scan_symbol(symbol_info, config, state):
                                 break
 
                     high_c = df['High'].iloc[i]
-                    low_prev2 = df['Low'].iloc[i - 2]
-                    if high_c < low_prev2:
-                        if df['High'].iloc[-1] >= high_c:
+                    low_p2 = df['Low'].iloc[i - 2]
+                    if high_c < low_p2:
+                        if closed_high >= high_c:
                             alert_key = f"{ticker}_{tf}_BEAR_FVG_FILL_{str(df.index[i])}"
                             if not state.get(alert_key):
                                 chart = generate_chart_image(df, f"🎯 Bearish FVG Filled - {name} ({tf})")
