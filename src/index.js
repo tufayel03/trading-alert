@@ -15,7 +15,7 @@ const SYMBOLS = [
 if (!globalThis._alertCache) globalThis._alertCache = new Set();
 if (!globalThis._lastScanLog) globalThis._lastScanLog = [];
 const memoryCache = globalThis._alertCache;
-const activeFvgs = new Map();
+// BUG FIX #9: activeFvgs removed — it was a dead variable that leaked memory
 
 export default {
   async scheduled(event, env, ctx) {
@@ -135,7 +135,17 @@ export default {
     // Direct Webhook Endpoint for TradingView Native Alerts
     if (url.pathname === "/api/webhook" && request.method === "POST") {
       try {
-        const body = await request.json();
+        // BUG FIX #11: TradingView sometimes sends Content-Type: text/plain even for JSON payloads.
+        // request.json() throws in that case. Use text() + JSON.parse() to handle both.
+        const rawText = await request.text();
+        let body = {};
+        try {
+          body = JSON.parse(rawText);
+        } catch {
+          // Not JSON — treat as plain text message
+          body = { message: rawText };
+        }
+
         const config = await getConfig(env);
         const webhookUrl = config.discordWebhookUrl || env.DISCORD_WEBHOOK_URL || DEFAULT_WEBHOOK;
 
@@ -146,7 +156,11 @@ export default {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body)
           });
-          return new Response(JSON.stringify({ success: true, forwarded: true, status: discordRes.status }), {
+          if (!discordRes.ok) {
+            const errText = await discordRes.text().catch(() => "");
+            console.error(`[webhook] Discord forward failed: ${discordRes.status} — ${errText}`);
+          }
+          return new Response(JSON.stringify({ success: discordRes.ok, status: discordRes.status }), {
             headers: { "Content-Type": "application/json" }
           });
         }
@@ -166,6 +180,7 @@ export default {
         await sendDiscordEmbed(webhookUrl, message, foundSym, timeframe, price, null, chartImg);
         return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
       } catch (e) {
+        console.error(`[webhook] Error: ${e.message}`);
         return new Response(JSON.stringify({ error: e.message }), { status: 400 });
       }
     }
@@ -272,7 +287,7 @@ async function getConfig(env) {
   return {
     discordWebhookUrl: fallbackWebhook,
     chartTheme: "light",
-    BOS: { enabled: true, timeframes: ["15m", "30m", "1h", "4h"] },
+    BOS: { enabled: true, timeframes: ["5m", "15m", "30m", "1h", "4h", "1d"] },  // BUG FIX #5: was missing 5m and 1d
     MSS: { enabled: env.ENABLE_MSS !== "false", timeframes: parseTf(env.MSS_TIMEFRAMES, ["15m", "30m", "1h", "4h"]) },
     FVG: {
       enabled: env.ENABLE_FVG !== "false",
@@ -389,9 +404,7 @@ async function scanAll(env) {
               if (!(await isAlreadyAlerted(env, key))) {
                 await markAsAlerted(env, key);
                 await sendDiscordEmbed(webhookUrl, "🟢 Bullish FVG Formed", sym, tf, currentPrice, gapPoints, chartImgUrl);
-
-                const fvgLevelKey = `${sym.ticker}_${tf}_BULL_FVG_LEVEL`;
-                activeFvgs.set(fvgLevelKey, { top: closedBar.low, bottom: barTwoBefore.high, timestamp, gapPoints });
+              // BUG FIX #9: removed activeFvgs.set() — map was never read and leaked memory unboundedly
               }
             }
           }
@@ -406,9 +419,7 @@ async function scanAll(env) {
               if (!(await isAlreadyAlerted(env, key))) {
                 await markAsAlerted(env, key);
                 await sendDiscordEmbed(webhookUrl, "🔴 Bearish FVG Formed", sym, tf, currentPrice, gapPoints, chartImgUrl);
-
-                const fvgLevelKey = `${sym.ticker}_${tf}_BEAR_FVG_LEVEL`;
-                activeFvgs.set(fvgLevelKey, { bottom: closedBar.high, top: barTwoBefore.low, timestamp, gapPoints });
+              // BUG FIX #9: removed activeFvgs.set() — map was never read and leaked memory unboundedly
               }
             }
           }
@@ -594,17 +605,8 @@ async function markAsAlerted(env, key) {
 }
 
 async function fetchCandles(ticker, timeframe) {
-  // 1. Try Primary TradingView Data Feed
-  try {
-    const tvCandles = await fetchTradingViewCandles(ticker, timeframe);
-    if (tvCandles && tvCandles.length >= 5) {
-      return tvCandles;
-    }
-  } catch (e) {
-    console.warn(`TradingView feed unavailable for ${ticker} (${timeframe}), falling back to Yahoo Finance:`, e.message);
-  }
-
-  // 2. Failover / Fallback to Yahoo Finance Feed
+  // BUG FIX #7: fetchTradingViewCandles always returned null (dead network call removed)
+  // Go directly to Yahoo Finance which is the only working data source
   return await fetchYahooCandles(ticker, timeframe);
 }
 

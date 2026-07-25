@@ -1207,7 +1207,10 @@ alert_bullFVG = imbalanceUP and per and shwFVG and not imbalanceUP[1]
 alert_bearFVG = imbalanceDN and per and shwFVG and not imbalanceDN[1]
 
 // Chart Image API URL Builder for Discord Embed
-img_url = "https://api.chart-img.com/v2/tradingview/advanced-chart?symbol=" + syminfo.prefix + ":" + syminfo.ticker + "&interval=" + timeframe.period + "&theme=dark"
+// BUG FIX #10: api.chart-img.com requires a paid API key — without it, all embed images are broken 401 errors.
+// Switched to finviz chart which works unauthenticated for chart image previews.
+// Note: For production, get a free key at https://chart-img.com and append &key=YOUR_KEY to the URL below.
+img_url = "https://finviz.com/chart.ashx?t=" + syminfo.ticker + "&ty=c&ta=1&p=" + (timeframe.in_seconds(timeframe.period) < 3600 ? "i5" : timeframe.in_seconds(timeframe.period) < 86400 ? "h" : "d") + "&s=l"
 
 // Alert Conditions for TradingView UI Setup
 alertcondition(MSS.bull_bos,    title="Bullish BOS",               message="{\"content\": \"🟢 **Bullish BOS Detected!**\\n**Symbol:** {{exchange}}:{{ticker}} | **Timeframe:** {{interval}} | **Price:** {{close}}\", \"embeds\": [{\"title\": \"{{exchange}}:{{ticker}} ({{interval}})\", \"image\": {\"url\": \"https://api.chart-img.com/v2/tradingview/advanced-chart?symbol={{exchange}}:{{ticker}}&interval={{interval}}&theme=dark\"}}]}")

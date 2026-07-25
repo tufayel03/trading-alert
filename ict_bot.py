@@ -20,6 +20,8 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
         self.send_header("Content-type", "text/plain")
         self.end_headers()
         self.wfile.write(b"ICT Discord Bot is running 24/7!")
+    def log_message(self, format, *args):
+        pass  # BUG FIX #12: suppress per-request logs that flood stdout on Render
 
 def start_health_server():
     port = int(os.environ.get("PORT", 8080))
@@ -40,11 +42,12 @@ def load_config():
                 {"name": "XAUUSD (Gold)", "ticker": "GC=F"}
             ],
             "settings": {
-                "BOS": {"enabled": True, "timeframes": ["5m", "15m", "30m", "1h", "4h", "1d"]},
-                "MSS": {"enabled": True, "timeframes": ["5m", "15m", "30m", "1h", "4h", "1d"]},
-                "FVG": {"enabled": True, "timeframes": ["5m", "15m", "30m", "1h", "4h", "1d"]},
-                "OB": {"enabled": True, "timeframes": ["5m", "15m", "30m", "1h", "4h", "1d"]},
-                "Liquidity": {"enabled": True, "timeframes": ["5m", "15m", "30m", "1h", "4h", "1d"]}
+                "BOS":      {"enabled": True,  "timeframes": ["5m", "15m", "30m", "1h", "4h", "1d"]},
+                "MSS":      {"enabled": True,  "timeframes": ["5m", "15m", "30m", "1h", "4h", "1d"]},
+                "FVG":      {"enabled": True,  "timeframes": ["5m", "15m", "30m", "1h", "4h", "1d"]},
+                "FVGFill":  {"enabled": True,  "timeframes": ["5m", "15m", "30m", "1h", "4h", "1d"]},  # BUG FIX #1
+                "OB":       {"enabled": True,  "timeframes": ["5m", "15m", "30m", "1h", "4h", "1d"]},
+                "Liquidity":{"enabled": True,  "timeframes": ["5m", "15m", "30m", "1h", "4h", "1d"]}
             }
         }
     
@@ -71,19 +74,19 @@ def save_state(state):
         print(f"Error saving state: {e}")
 
 def fetch_candle_data(ticker, timeframe):
-    """Fetches candlestick data for the specified timeframe."""
+    """Fetches candlestick OHLC data for the given timeframe, returning only CLOSED bars."""
     tf_map = {
-        "5m": ("5m", "5d"),
+        "5m":  ("5m",  "5d"),
         "15m": ("15m", "7d"),
         "30m": ("30m", "7d"),
-        "1h": ("60m", "1mo"),
-        "4h": ("60m", "3mo"),
-        "1d": ("1d", "6mo")
+        "1h":  ("60m", "1mo"),
+        "4h":  ("60m", "3mo"),  # fetched as 1h, resampled to 4h below
+        "1d":  ("1d",  "6mo")
     }
-    
+
     interval, period = tf_map.get(timeframe, ("60m", "1mo"))
-    df = yf.download(ticker, period=period, interval=interval, progress=False)
-    
+    df = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
+
     if df.empty:
         return None
 
@@ -92,14 +95,21 @@ def fetch_candle_data(ticker, timeframe):
 
     df = df[['Open', 'High', 'Low', 'Close', 'Volume']].dropna()
 
+    # BUG FIX #3: Resample 1h → 4h BEFORE stripping the live candle,
+    # but only include complete 4-bar buckets (partial live bucket is excluded by integer division)
     if timeframe == "4h":
         df = df.resample('4h').agg({
-            'Open': 'first',
-            'High': 'max',
-            'Low': 'min',
-            'Close': 'last',
+            'Open':   'first',
+            'High':   'max',
+            'Low':    'min',
+            'Close':  'last',
             'Volume': 'sum'
         }).dropna()
+
+    # BUG FIX #3: Strip the last bar which is always the live/open (incomplete) candle.
+    # All pattern evaluation should use iloc[-1] now (which was the previous iloc[-2]).
+    if len(df) > 1:
+        df = df.iloc[:-1]
 
     return df
 
@@ -177,21 +187,22 @@ def scan_symbol(symbol_info, config, state):
             if df is None or len(df) < 5:
                 continue
 
-            # Use last CLOSED bar (iloc[-2]) and prior bars (iloc[-3], iloc[-4]) for confirmed signals
-            closed_idx = df.index[-2]
-            price = df['Close'].iloc[-2]
-            timestamp_str = str(closed_idx)
+            # BUG FIX #3: live candle already stripped in fetch_candle_data — use iloc[-1] as closed bar
+            # BUG FIX #4: use strftime for stable timestamp keys across environments (no timezone suffix)
+            closed_idx   = df.index[-1]
+            price        = df['Close'].iloc[-1]
+            timestamp_str = closed_idx.strftime('%Y%m%dT%H%M')  # e.g. '20250725T1200'
 
-            closed_open  = df['Open'].iloc[-2]
-            closed_high  = df['High'].iloc[-2]
-            closed_low   = df['Low'].iloc[-2]
-            closed_close = df['Close'].iloc[-2]
+            closed_open  = df['Open'].iloc[-1]
+            closed_high  = df['High'].iloc[-1]
+            closed_low   = df['Low'].iloc[-1]
+            closed_close = df['Close'].iloc[-1]
 
-            prev_close   = df['Close'].iloc[-3]
-            bar2b_open   = df['Open'].iloc[-4]
-            bar2b_close  = df['Close'].iloc[-4]
-            bar2b_high   = df['High'].iloc[-4]
-            bar2b_low    = df['Low'].iloc[-4]
+            prev_close   = df['Close'].iloc[-2]
+            bar2b_open   = df['Open'].iloc[-3]
+            bar2b_close  = df['Close'].iloc[-3]
+            bar2b_high   = df['High'].iloc[-3]
+            bar2b_low    = df['Low'].iloc[-3]
 
             # 1. FVG Detection (on closed bar iloc[-2] vs iloc[-4])
             if settings.get("FVG", {}).get("enabled") and tf in settings["FVG"].get("timeframes", []):
