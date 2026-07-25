@@ -9,7 +9,12 @@ const SYMBOLS = [
   { name: "XAUUSD (Gold)", ticker: "GC=F", tvSymbol: "OANDA:XAUUSD", decimals: 2 }
 ];
 
-const memoryCache = new Set();
+// BUG FIX: Use globalThis for in-memory dedup so it persists across warm Worker invocations.
+// Without KV, the same Worker instance may stay warm for minutes/hours, so globalThis
+// provides best-effort dedup. With ALERT_KV configured, this is irrelevant.
+if (!globalThis._alertCache) globalThis._alertCache = new Set();
+if (!globalThis._lastScanLog) globalThis._lastScanLog = [];
+const memoryCache = globalThis._alertCache;
 const activeFvgs = new Map();
 
 export default {
@@ -212,9 +217,31 @@ export default {
       return new Response("Scan triggered manually!", { status: 200 });
     }
 
+    // Debug endpoint — visit /api/debug to see config, webhook, and last scan log
+    if (url.pathname === "/api/debug") {
+      return handleDebug(env);
+    }
+
+
     return new Response("TUF Capital ICT Bot Active", { status: 200 });
   }
 };
+
+// Debug endpoint — visit /api/debug to see config and last scan log
+async function handleDebug(env) {
+  const config = await getConfig(env);
+  const safeConfig = JSON.parse(JSON.stringify(config));
+  if (safeConfig.discordWebhookUrl) {
+    safeConfig.discordWebhookUrl = safeConfig.discordWebhookUrl.replace(/\/[^\/]+$/, "/***HIDDEN***");
+  }
+  return new Response(JSON.stringify({
+    status: "ok",
+    hasKV: !!env.ALERT_KV,
+    hasWebhook: !!(env.DISCORD_WEBHOOK_URL || DEFAULT_WEBHOOK),
+    config: safeConfig,
+    lastScanLog: globalThis._lastScanLog || []
+  }, null, 2), { headers: { "Content-Type": "application/json" } });
+}
 
 async function getConfig(env) {
   let custom = null;
@@ -296,7 +323,14 @@ function getPivotLow(candles, lookback = 30) {
 async function scanAll(env) {
   const CONFIG = await getConfig(env);
   const webhookUrl = CONFIG.discordWebhookUrl || env.DISCORD_WEBHOOK_URL || DEFAULT_WEBHOOK;
-  if (!webhookUrl) return;
+  if (!webhookUrl) {
+    console.error("[scanAll] No Discord webhook URL configured. Aborting scan.");
+    return;
+  }
+
+  const scanStart = new Date().toISOString();
+  console.log(`[scanAll] Starting scan at ${scanStart}`);
+  globalThis._lastScanLog = [`Scan started: ${scanStart}`, `hasKV: ${!!env.ALERT_KV}`, `webhook: ${webhookUrl.substring(0, 50)}...`];
 
   for (const sym of SYMBOLS) {
     const timeframes = new Set();
@@ -306,13 +340,27 @@ async function scanAll(env) {
       }
     });
 
+    console.log(`[scanAll] ${sym.name}: scanning timeframes: ${[...timeframes].join(", ")}`);
     const isGold = sym.ticker === "GC=F";
     const pointMultiplier = isGold ? 100 : 100000;
 
     for (const tf of timeframes) {
       try {
         const candles = await fetchCandles(sym.ticker, tf);
-        if (!candles || candles.length < 5) continue;
+        if (!candles || candles.length < 5) {
+          console.warn(`[scanAll] Skipping ${sym.name} (${tf}): insufficient candles (${candles?.length ?? 0})`);
+          continue;
+        }
+
+        // Yahoo Finance always includes an open (incomplete) candle as the last bar.
+        // BUG FIX: We must use candles[-2] as the last CLOSED bar.
+        // Additionally verify the last candle is truly the current open bar (within 6 hrs of now).
+        const nowTs = Math.floor(Date.now() / 1000);
+        const lastCandle = candles[candles.length - 1];
+        // If the last candle is older than 6 hours, data might be stale — log but continue
+        if (nowTs - lastCandle.timestamp > 21600) {
+          console.warn(`[scanAll] ${sym.name} (${tf}): last candle is stale (${new Date(lastCandle.timestamp * 1000).toISOString()})`);
+        }
 
         const closedBar = candles[candles.length - 2];
         const barBefore = candles[candles.length - 3];
@@ -321,6 +369,7 @@ async function scanAll(env) {
         const timestamp = closedBar.timestamp;
         const currentPrice = closedBar.close;
         const chartImgUrl = generateTradingViewChartUrl(sym.tvSymbol, tf, CONFIG.chartTheme || "light");
+        console.log(`[scanAll] ${sym.name} (${tf}): closedBar price=${currentPrice} ts=${new Date(timestamp*1000).toISOString()}`);
 
         // 1. FVG Creation & Tracking with Min Points Filter
         if (CONFIG.FVG?.enabled && CONFIG.FVG.timeframes.includes(tf)) {
