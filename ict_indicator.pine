@@ -584,7 +584,6 @@ MSS.bull_bos      := false
 MSS.bear_bos      := false
 alert_buysideLiq  := false
 alert_sellsideLiq := false
-alert_sellsideLiq := false
 alert_bullOB      := false
 alert_bearOB      := false
 MSS.bull_event    := false

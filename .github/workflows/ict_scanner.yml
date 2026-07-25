@@ -27,6 +27,7 @@ jobs:
       - name: Run ICT Scanner
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          CONTINUOUS_MODE: "false"
         run: |
           python ict_bot.py
 

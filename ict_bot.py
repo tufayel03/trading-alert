@@ -150,7 +150,7 @@ def send_discord_alert(webhook_url, event_title, symbol_name, timeframe, price, 
         with open(chart_file, "rb") as f:
             files = {
                 "payload_json": (None, json.dumps(payload), "application/json"),
-                "file": (chart_file, f, "image/png")
+                "file": ("chart.png", f, "image/png")
             }
             res = requests.post(webhook_url, files=files)
             if res.status_code in [200, 204]:
