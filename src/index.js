@@ -254,9 +254,9 @@ async function getConfig(env) {
 
 function getPivotHigh(candles, lookback = 30) {
   const n = candles.length;
-  if (n < 6) return Math.max(...candles.map(c => c.high));
+  if (n < 7) return Math.max(...candles.map(c => c.high));
 
-  for (let i = n - 4; i >= Math.max(2, n - lookback); i--) {
+  for (let i = n - 5; i >= Math.max(2, n - lookback); i--) {
     if (
       candles[i].high >= candles[i - 1].high &&
       candles[i].high >= candles[i - 2].high &&
@@ -266,14 +266,14 @@ function getPivotHigh(candles, lookback = 30) {
       return candles[i].high;
     }
   }
-  return Math.max(...candles.slice(-15, -3).map(c => c.high));
+  return Math.max(...candles.slice(-20, -3).map(c => c.high));
 }
 
 function getPivotLow(candles, lookback = 30) {
   const n = candles.length;
-  if (n < 6) return Math.min(...candles.map(c => c.low));
+  if (n < 7) return Math.min(...candles.map(c => c.low));
 
-  for (let i = n - 4; i >= Math.max(2, n - lookback); i--) {
+  for (let i = n - 5; i >= Math.max(2, n - lookback); i--) {
     if (
       candles[i].low <= candles[i - 1].low &&
       candles[i].low <= candles[i - 2].low &&
@@ -283,7 +283,7 @@ function getPivotLow(candles, lookback = 30) {
       return candles[i].low;
     }
   }
-  return Math.min(...candles.slice(-15, -3).map(c => c.low));
+  return Math.min(...candles.slice(-20, -3).map(c => c.low));
 }
 
 async function scanAll(env) {
