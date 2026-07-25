@@ -266,6 +266,55 @@ def scan_symbol(symbol_info, config, state):
                         send_discord_alert(webhook_url, "💥 Sellside Liquidity Swept", name, tf, price, chart)
                         state[alert_key] = True
 
+            # 5. Order Block (OB) Detection
+            if settings.get("OB", {}).get("enabled") and tf in settings["OB"].get("timeframes", []):
+                open_2b = df['Open'].iloc[-3]
+                close_2b = df['Close'].iloc[-3]
+                high_2b = df['High'].iloc[-3]
+                low_2b = df['Low'].iloc[-3]
+
+                curr_open = df['Open'].iloc[-1]
+                curr_close = df['Close'].iloc[-1]
+
+                if close_2b < open_2b and curr_close > high_2b and curr_close > curr_open:
+                    alert_key = f"{ticker}_{tf}_BULL_OB_{timestamp_str}"
+                    if not state.get(alert_key):
+                        chart = generate_chart_image(df, f"🟢 Bullish OB - {name} ({tf})")
+                        send_discord_alert(webhook_url, "🟢 Bullish Order Block (+OB) Formed", name, tf, price, chart)
+                        state[alert_key] = True
+
+                if close_2b > open_2b and curr_close < low_2b and curr_close < curr_open:
+                    alert_key = f"{ticker}_{tf}_BEAR_OB_{timestamp_str}"
+                    if not state.get(alert_key):
+                        chart = generate_chart_image(df, f"🔴 Bearish OB - {name} ({tf})")
+                        send_discord_alert(webhook_url, "🔴 Bearish Order Block (-OB) Formed", name, tf, price, chart)
+                        state[alert_key] = True
+
+            # 6. FVG Fill Detection
+            if settings.get("FVGFill", {}).get("enabled") and tf in settings["FVGFill"].get("timeframes", []):
+                for i in range(len(df) - 4, max(2, len(df) - 15), -1):
+                    low_c = df['Low'].iloc[i]
+                    high_prev2 = df['High'].iloc[i - 2]
+                    if low_c > high_prev2:
+                        if df['Low'].iloc[-1] <= low_c:
+                            alert_key = f"{ticker}_{tf}_BULL_FVG_FILL_{str(df.index[i])}"
+                            if not state.get(alert_key):
+                                chart = generate_chart_image(df, f"🎯 Bullish FVG Filled - {name} ({tf})")
+                                send_discord_alert(webhook_url, "🎯 Bullish FVG Filled / Tapped", name, tf, price, chart)
+                                state[alert_key] = True
+                                break
+
+                    high_c = df['High'].iloc[i]
+                    low_prev2 = df['Low'].iloc[i - 2]
+                    if high_c < low_prev2:
+                        if df['High'].iloc[-1] >= high_c:
+                            alert_key = f"{ticker}_{tf}_BEAR_FVG_FILL_{str(df.index[i])}"
+                            if not state.get(alert_key):
+                                chart = generate_chart_image(df, f"🎯 Bearish FVG Filled - {name} ({tf})")
+                                send_discord_alert(webhook_url, "🎯 Bearish FVG Filled / Tapped", name, tf, price, chart)
+                                state[alert_key] = True
+                                break
+
         except Exception as e:
             print(f"Error scanning {name} ({tf}): {e}")
 
