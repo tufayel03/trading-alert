@@ -40,10 +40,11 @@ def load_config():
                 {"name": "XAUUSD (Gold)", "ticker": "GC=F"}
             ],
             "settings": {
-                "MSS": {"enabled": True, "timeframes": ["1h", "4h"]},
-                "FVG": {"enabled": True, "timeframes": ["15m", "1h"]},
-                "OB": {"enabled": True, "timeframes": ["1h", "4h"]},
-                "Liquidity": {"enabled": True, "timeframes": ["15m", "1h", "4h"]}
+                "BOS": {"enabled": True, "timeframes": ["5m", "15m", "30m", "1h", "4h", "1d"]},
+                "MSS": {"enabled": True, "timeframes": ["5m", "15m", "30m", "1h", "4h", "1d"]},
+                "FVG": {"enabled": True, "timeframes": ["5m", "15m", "30m", "1h", "4h", "1d"]},
+                "OB": {"enabled": True, "timeframes": ["5m", "15m", "30m", "1h", "4h", "1d"]},
+                "Liquidity": {"enabled": True, "timeframes": ["5m", "15m", "30m", "1h", "4h", "1d"]}
             }
         }
     
@@ -74,6 +75,7 @@ def fetch_candle_data(ticker, timeframe):
     tf_map = {
         "5m": ("5m", "5d"),
         "15m": ("15m", "7d"),
+        "30m": ("30m", "7d"),
         "1h": ("60m", "1mo"),
         "4h": ("60m", "3mo"),
         "1d": ("1d", "6mo")
@@ -199,14 +201,37 @@ def scan_symbol(symbol_info, config, state):
                         send_discord_alert(webhook_url, "🔴 Bearish FVG Formed", name, tf, price, chart)
                         state[alert_key] = True
 
-            # 2. MSS Detection
+            # 2. BOS Detection
+            if settings.get("BOS", {}).get("enabled") and tf in settings["BOS"].get("timeframes", []):
+                highs = df['High']
+                lows = df['Low']
+                closes = df['Close']
+                
+                swing_high = highs.iloc[-15:-3].max()
+                swing_low = lows.iloc[-15:-3].min()
+
+                if closes.iloc[-1] > swing_high and closes.iloc[-2] <= swing_high:
+                    alert_key = f"{ticker}_{tf}_BULL_BOS_{timestamp_str}"
+                    if not state.get(alert_key):
+                        chart = generate_chart_image(df, f"🟢 Bullish BOS - {name} ({tf})")
+                        send_discord_alert(webhook_url, "🟢 Bullish BOS (Break of Structure)", name, tf, price, chart)
+                        state[alert_key] = True
+
+                if closes.iloc[-1] < swing_low and closes.iloc[-2] >= swing_low:
+                    alert_key = f"{ticker}_{tf}_BEAR_BOS_{timestamp_str}"
+                    if not state.get(alert_key):
+                        chart = generate_chart_image(df, f"🔴 Bearish BOS - {name} ({tf})")
+                        send_discord_alert(webhook_url, "🔴 Bearish BOS (Break of Structure)", name, tf, price, chart)
+                        state[alert_key] = True
+
+            # 3. MSS Detection
             if settings.get("MSS", {}).get("enabled") and tf in settings["MSS"].get("timeframes", []):
                 highs = df['High']
                 lows = df['Low']
                 closes = df['Close']
                 
-                swing_high = highs.iloc[-10:-2].max()
-                swing_low = lows.iloc[-10:-2].min()
+                swing_high = highs.iloc[-15:-3].max()
+                swing_low = lows.iloc[-15:-3].min()
 
                 if closes.iloc[-1] > swing_high and closes.iloc[-2] <= swing_high:
                     alert_key = f"{ticker}_{tf}_BULL_MSS_{timestamp_str}"
