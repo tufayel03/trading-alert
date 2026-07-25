@@ -5,4 +5,16 @@ compatibility_date = "2024-01-01"
 [triggers]
 crons = ["* * * * *"]
 
-# You can set DISCORD_WEBHOOK_URL via 'npx wrangler secret put DISCORD_WEBHOOK_URL' or in Cloudflare Dashboard
+# REQUIRED: KV Namespace for alert deduplication.
+# Without this, the same alert fires every minute (Worker is stateless).
+# Steps to create:
+#   1. Run: npx wrangler kv namespace create ALERT_KV
+#   2. Copy the returned id into the binding below
+#   3. Run: npx wrangler deploy
+#
+# Uncomment and fill in your KV namespace id after running the above command:
+# [[kv_namespaces]]
+# binding = "ALERT_KV"
+# id = "PASTE_YOUR_KV_NAMESPACE_ID_HERE"
+
+# Set your Discord webhook via: npx wrangler secret put DISCORD_WEBHOOK_URL

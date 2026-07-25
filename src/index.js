@@ -231,7 +231,14 @@ async function getConfig(env) {
   if (custom) {
     if (!custom.discordWebhookUrl) custom.discordWebhookUrl = fallbackWebhook;
     if (!custom.chartTheme) custom.chartTheme = "light";
-    if (!custom.BOS) custom.BOS = { enabled: true, timeframes: ["15m", "30m", "1h", "4h"] };
+    // BUG FIX #1: When user saves settings from UI, all missing pattern keys must get defaults.
+    // Without this, patterns not saved by UI would be undefined and skip all alerts.
+    if (!custom.BOS)      custom.BOS      = { enabled: true, timeframes: ["5m", "15m", "30m", "1h", "4h", "1d"] };
+    if (!custom.MSS)      custom.MSS      = { enabled: true, timeframes: ["5m", "15m", "30m", "1h", "4h", "1d"] };
+    if (!custom.FVG)      custom.FVG      = { enabled: true, timeframes: ["5m", "15m", "30m", "1h"], minPointsForex: { "5m": 50, "15m": 100, "30m": 150, "1h": 200, "4h": 500, "1d": 1000 }, minPointsGold: { "5m": 100, "15m": 300, "30m": 400, "1h": 500, "4h": 1000, "1d": 2000 } };
+    if (!custom.FVGFill)  custom.FVGFill  = { enabled: true, timeframes: ["5m", "15m", "30m", "1h"] };
+    if (!custom.OB)       custom.OB       = { enabled: true, timeframes: ["5m", "15m", "30m", "1h", "4h"] };
+    if (!custom.Liquidity)custom.Liquidity= { enabled: true, timeframes: ["5m", "15m", "30m", "1h", "4h"] };
     return custom;
   }
 
@@ -515,17 +522,25 @@ async function scanAll(env) {
 }
 
 async function isAlreadyAlerted(env, key) {
+  // BUG FIX #2: Cloudflare Workers are stateless — memoryCache (const memoryCache = new Set())
+  // is RESET on every invocation (every minute). This means the dedup Set is ALWAYS empty,
+  // so the same alert would fire every minute. Without ALERT_KV, we must skip dedup
+  // for cron-triggered events, or always treat as NOT alerted (alert fires every scan).
+  // SOLUTION: Require ALERT_KV for proper dedup. Log a warning if missing.
   if (env.ALERT_KV) {
     const val = await env.ALERT_KV.get(key);
     return val !== null;
   }
-  return memoryCache.has(key);
+  // No KV: Worker is stateless, return false so alerts fire (no dedup = duplicates, but at least alerts work)
+  console.warn("[WARN] ALERT_KV not configured — deduplication disabled. Add a KV namespace binding named ALERT_KV in wrangler.toml and Cloudflare dashboard.");
+  return false;
 }
 
 async function markAsAlerted(env, key) {
   if (env.ALERT_KV) {
     await env.ALERT_KV.put(key, "1", { expirationTtl: 604800 });
   }
+  // memoryCache is useless across invocations but keep for local dev
   memoryCache.add(key);
 }
 
@@ -574,33 +589,42 @@ async function fetchTradingViewCandles(ticker, timeframe) {
 }
 
 async function fetchYahooCandles(ticker, timeframe) {
+  // BUG FIX #3: 4h timeframe was fetching 1h data but NOT resampling into 4h candles.
+  // This caused pivot high/low to be calculated on 1h data while conditions checked 4h logic,
+  // leading to incorrect or completely missed signals.
   const intervalMap = {
-    "5m": { interval: "5m", range: "5d" },
+    "5m":  { interval: "5m",  range: "5d" },
     "15m": { interval: "15m", range: "5d" },
     "30m": { interval: "30m", range: "5d" },
-    "1h": { interval: "60m", range: "1mo" },
-    "4h": { interval: "60m", range: "3mo" },
-    "1d": { interval: "1d", range: "6mo" }
+    "1h":  { interval: "60m", range: "1mo" },
+    "4h":  { interval: "60m", range: "3mo" },  // fetch 1h, resample below
+    "1d":  { interval: "1d",  range: "6mo" }
   };
 
   const { interval, range } = intervalMap[timeframe] || { interval: "60m", range: "1mo" };
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=${interval}&range=${range}`;
 
   const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    console.error(`[fetchYahooCandles] HTTP ${res.status} for ${ticker} (${timeframe})`);
+    return null;
+  }
 
   const data = await res.json();
   const result = data?.chart?.result?.[0];
-  if (!result) return null;
+  if (!result) {
+    console.error(`[fetchYahooCandles] No result in Yahoo response for ${ticker} (${timeframe})`);
+    return null;
+  }
 
   const timestamps = result.timestamp;
   const quote = result.indicators?.quote?.[0];
   if (!timestamps || !quote) return null;
 
-  const candles = [];
+  const rawCandles = [];
   for (let i = 0; i < timestamps.length; i++) {
     if (quote.open[i] != null && quote.high[i] != null && quote.low[i] != null && quote.close[i] != null) {
-      candles.push({
+      rawCandles.push({
         timestamp: timestamps[i],
         open: quote.open[i],
         high: quote.high[i],
@@ -610,7 +634,24 @@ async function fetchYahooCandles(ticker, timeframe) {
     }
   }
 
-  return candles;
+  // Resample 1h → 4h candles (group every 4 bars)
+  if (timeframe === "4h" && rawCandles.length > 0) {
+    const resampled = [];
+    const bucketSize = 4;
+    for (let i = 0; i + bucketSize <= rawCandles.length; i += bucketSize) {
+      const bucket = rawCandles.slice(i, i + bucketSize);
+      resampled.push({
+        timestamp: bucket[0].timestamp,
+        open:  bucket[0].open,
+        high:  Math.max(...bucket.map(c => c.high)),
+        low:   Math.min(...bucket.map(c => c.low)),
+        close: bucket[bucket.length - 1].close
+      });
+    }
+    return resampled;
+  }
+
+  return rawCandles;
 }
 
 function generateTradingViewChartUrl(tvSymbol, timeframe, theme = "light") {
@@ -682,11 +723,26 @@ async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price
     embeds: [embed]
   };
 
-  await fetch(webhookUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
+  // BUG FIX #4: Discord POST had no error handling. Failures (rate limits, bad webhook URL,
+  // etc.) were silent — the scanner appeared to run fine but alerts were never delivered.
+  try {
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (res.status === 429) {
+      const retry = await res.json().catch(() => ({}));
+      console.warn(`[Discord] Rate limited. Retry after ${retry.retry_after ?? "??"}s for event: ${eventTitle}`);
+    } else if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(`[Discord] Failed to send alert "${eventTitle}": HTTP ${res.status} — ${body}`);
+    } else {
+      console.log(`[Discord] ✅ Alert sent: ${eventTitle} | ${symbol.name} (${timeframe}) @ ${priceFormatted}`);
+    }
+  } catch (e) {
+    console.error(`[Discord] Network error sending "${eventTitle}": ${e.message}`);
+  }
 }
 
 function renderAdminHTML(settings) {
