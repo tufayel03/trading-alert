@@ -329,6 +329,15 @@ def scan_symbol(symbol_info, config, state):
         except Exception as e:
             print(f"Error scanning {name} ({tf}): {e}")
 
+def start_health_server():
+    try:
+        port = int(os.environ.get("PORT", 8080))
+        server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+        print(f"🌐 Keep-Alive Web Server started on port {port}")
+        server.serve_forever()
+    except Exception as e:
+        print(f"⚠️ Health server note: {e}")
+
 def run_once():
     config = load_config()
     state = load_state()
@@ -337,16 +346,16 @@ def run_once():
     save_state(state)
 
 def main():
-    print("🚀 Starting 24/7 ICT Scanner for EURUSD, GBPUSD, and XAUUSD...")
+    print("🚀 Starting ICT Scanner for EURUSD, GBPUSD, and XAUUSD...")
     
-    # Start Keep-Alive HTTP health server in background thread for Render
-    server_thread = threading.Thread(target=start_health_server, daemon=True)
-    server_thread.start()
-
     # Check mode: Continuous loop (for Render/Server) or Single run (for GitHub Actions)
     continuous_mode = os.environ.get("CONTINUOUS_MODE", "true").lower() == "true"
 
     if continuous_mode:
+        # Start Keep-Alive HTTP health server in background thread for Render
+        server_thread = threading.Thread(target=start_health_server, daemon=True)
+        server_thread.start()
+
         print("🔁 Continuous 24/7 Real-Time Loop Active (Scanning every 30 seconds)...")
         while True:
             try:

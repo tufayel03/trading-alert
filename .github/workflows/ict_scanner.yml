@@ -40,6 +40,10 @@ jobs:
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git pull origin main --rebase --autostash || true
           git add alert_state.json || true
-          git diff --quiet && git diff --staged --quiet || (git pull --rebase origin main && git commit -m "update alert state" && git push origin main)
+          if ! git diff --staged --quiet; then
+            git commit -m "update alert state"
+            git push origin main
+          fi
 
