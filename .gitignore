@@ -1,7 +1,6 @@
 # JForex Compiled Classes and Build Packages
 *.class
 *.jar
-*.jfx
 jforex/
 jforex_indicator/jforex/
 jforex_indicator/*.class
