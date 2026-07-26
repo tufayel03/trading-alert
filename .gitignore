@@ -1,0 +1,18 @@
+# JForex Compiled Classes and Build Packages
+*.class
+*.jar
+*.jfx
+jforex/
+jforex_indicator/jforex/
+jforex_indicator/*.class
+
+# Python Runtime & State Files
+__pycache__/
+*.py[cod]
+alert_state.json
+chart.png
+*.log
+
+# Cloudflare & Node Artifacts
+node_modules/
+.wrangler/
