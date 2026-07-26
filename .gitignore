@@ -1,9 +1,9 @@
-# JForex Compiled Classes and Build Packages
-*.class
+# JForex Build Artifacts
 *.jar
-jforex/
-jforex_indicator/jforex/
-jforex_indicator/*.class
+com/
+!jforex_indicator/jforex/
+!jforex_indicator/com/
+!jforex_indicator/**/*.class
 
 # Python Runtime & State Files
 __pycache__/
