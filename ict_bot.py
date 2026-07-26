@@ -8,6 +8,8 @@ import requests
 import pandas as pd
 import numpy as np
 import yfinance as yf
+import matplotlib
+matplotlib.use('Agg')  # Headless backend for Linux/GitHub Actions servers without GUI/X11
 import mplfinance as mpf
 
 STATE_FILE = "alert_state.json"
