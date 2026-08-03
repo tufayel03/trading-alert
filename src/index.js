@@ -1,7 +1,7 @@
 // 24/7 Cloudflare Worker ICT Discord Alert Bot with Premium TUF Capital Dashboard UI
 // Runs every 1 minute for free on Cloudflare Workers
 
-const DEFAULT_WEBHOOK = "https://discord.com/api/webhooks/1529895992118214706/72e329IvsoaXVMr3zIRf5dQVXaYc3dwE3";
+const DEFAULT_WEBHOOK = "https://discord.com/api/webhooks/1529895992118214706/72e3Z9IVsoaXVMr3zIRfF5dQVXaYc3dwE3718KobVA_Xc-aEtXc3njCgf27nTFRjB03v";
 
 const SYMBOLS = [
   { name: "EURUSD", ticker: "EURUSD=X", tvSymbol: "FX:EURUSD", decimals: 5 },
