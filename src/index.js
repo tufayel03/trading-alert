@@ -383,6 +383,20 @@ async function scanAll(env) {
         
         const timestamp = closedBar.timestamp;
         const currentPrice = closedBar.close;
+
+        // Freshness Check: Skip generating alerts if closedBar closed longer ago than MAX_ALERT_LAG
+        const TF_SECONDS = { "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400, "1d": 86400 };
+        const MAX_ALERT_LAG = { "5m": 600, "15m": 1200, "30m": 2100, "1h": 3600, "4h": 7200, "1d": 14400 };
+        const tfSec = TF_SECONDS[tf] || 900;
+        const barCloseTime = closedBar.timestamp + tfSec;
+        const lagSeconds = nowTs - barCloseTime;
+        const maxLag = MAX_ALERT_LAG[tf] || 1800;
+
+        if (lagSeconds > maxLag) {
+          console.log(`[scanAll] Skipping ${sym.name} (${tf}): closedBar closed ${Math.round(lagSeconds / 60)}m ago (stale)`);
+          continue;
+        }
+
         const chartImgUrl = generateTradingViewChartUrl(sym.tvSymbol, tf, CONFIG.chartTheme || "light");
         console.log(`[scanAll] ${sym.name} (${tf}): closedBar price=${currentPrice} ts=${new Date(timestamp*1000).toISOString()}`);
 
@@ -404,7 +418,6 @@ async function scanAll(env) {
               if (!(await isAlreadyAlerted(env, key))) {
                 await markAsAlerted(env, key);
                 await sendDiscordEmbed(webhookUrl, "🟢 Bullish FVG Formed", sym, tf, currentPrice, gapPoints, chartImgUrl);
-              // BUG FIX #9: removed activeFvgs.set() — map was never read and leaked memory unboundedly
               }
             }
           }
@@ -419,7 +432,6 @@ async function scanAll(env) {
               if (!(await isAlreadyAlerted(env, key))) {
                 await markAsAlerted(env, key);
                 await sendDiscordEmbed(webhookUrl, "🔴 Bearish FVG Formed", sym, tf, currentPrice, gapPoints, chartImgUrl);
-              // BUG FIX #9: removed activeFvgs.set() — map was never read and leaked memory unboundedly
               }
             }
           }
@@ -476,15 +488,11 @@ async function scanAll(env) {
           const pivotHigh = getPivotHigh(candles);
           const pivotLow = getPivotLow(candles);
 
-          const isBullishBos = (closedBar.close > pivotHigh && barBefore.close <= pivotHigh) ||
-                               (barBefore.close > pivotHigh && barTwoBefore.close <= pivotHigh);
-          
-          const isBearishBos = (closedBar.close < pivotLow && barBefore.close >= pivotLow) ||
-                               (barBefore.close < pivotLow && barTwoBefore.close >= pivotLow);
+          const isBullishBos = (closedBar.close > pivotHigh && barBefore.close <= pivotHigh);
+          const isBearishBos = (closedBar.close < pivotLow && barBefore.close >= pivotLow);
 
           if (isBullishBos) {
-            const bosBar = closedBar.close > pivotHigh ? closedBar : barBefore;
-            const key = `${sym.ticker}_${tf}_BULL_BOS_${bosBar.timestamp}`;
+            const key = `${sym.ticker}_${tf}_BULL_BOS_${timestamp}`;
             if (!(await isAlreadyAlerted(env, key))) {
               await markAsAlerted(env, key);
               await sendDiscordEmbed(webhookUrl, "🟢 Bullish BOS (Break of Structure)", sym, tf, currentPrice, null, chartImgUrl);
@@ -492,8 +500,7 @@ async function scanAll(env) {
           }
 
           if (isBearishBos) {
-            const bosBar = closedBar.close < pivotLow ? closedBar : barBefore;
-            const key = `${sym.ticker}_${tf}_BEAR_BOS_${bosBar.timestamp}`;
+            const key = `${sym.ticker}_${tf}_BEAR_BOS_${timestamp}`;
             if (!(await isAlreadyAlerted(env, key))) {
               await markAsAlerted(env, key);
               await sendDiscordEmbed(webhookUrl, "🔴 Bearish BOS (Break of Structure)", sym, tf, currentPrice, null, chartImgUrl);
@@ -506,15 +513,11 @@ async function scanAll(env) {
           const pivotHigh = getPivotHigh(candles);
           const pivotLow = getPivotLow(candles);
 
-          const isBullishMss = (closedBar.close > pivotHigh && barBefore.close <= pivotHigh) ||
-                               (barBefore.close > pivotHigh && barTwoBefore.close <= pivotHigh);
-          
-          const isBearishMss = (closedBar.close < pivotLow && barBefore.close >= pivotLow) ||
-                               (barBefore.close < pivotLow && barTwoBefore.close >= pivotLow);
+          const isBullishMss = (closedBar.close > pivotHigh && barBefore.close <= pivotHigh);
+          const isBearishMss = (closedBar.close < pivotLow && barBefore.close >= pivotLow);
 
           if (isBullishMss) {
-            const mssBar = closedBar.close > pivotHigh ? closedBar : barBefore;
-            const key = `${sym.ticker}_${tf}_BULL_MSS_${mssBar.timestamp}`;
+            const key = `${sym.ticker}_${tf}_BULL_MSS_${timestamp}`;
             if (!(await isAlreadyAlerted(env, key))) {
               await markAsAlerted(env, key);
               await sendDiscordEmbed(webhookUrl, "🟢 Bullish MSS Breakout", sym, tf, currentPrice, null, chartImgUrl);
@@ -522,8 +525,7 @@ async function scanAll(env) {
           }
 
           if (isBearishMss) {
-            const mssBar = closedBar.close < pivotLow ? closedBar : barBefore;
-            const key = `${sym.ticker}_${tf}_BEAR_MSS_${mssBar.timestamp}`;
+            const key = `${sym.ticker}_${tf}_BEAR_MSS_${timestamp}`;
             if (!(await isAlreadyAlerted(env, key))) {
               await markAsAlerted(env, key);
               await sendDiscordEmbed(webhookUrl, "🔴 Bearish MSS Breakdown", sym, tf, currentPrice, null, chartImgUrl);
@@ -582,26 +584,38 @@ async function scanAll(env) {
 }
 
 async function isAlreadyAlerted(env, key) {
-  // BUG FIX #2: Cloudflare Workers are stateless — memoryCache (const memoryCache = new Set())
-  // is RESET on every invocation (every minute). This means the dedup Set is ALWAYS empty,
-  // so the same alert would fire every minute. Without ALERT_KV, we must skip dedup
-  // for cron-triggered events, or always treat as NOT alerted (alert fires every scan).
-  // SOLUTION: Require ALERT_KV for proper dedup. Log a warning if missing.
-  if (env.ALERT_KV) {
-    const val = await env.ALERT_KV.get(key);
-    return val !== null;
+  if (memoryCache && memoryCache.has(key)) {
+    return true;
   }
-  // No KV: Worker is stateless, return false so alerts fire (no dedup = duplicates, but at least alerts work)
-  console.warn("[WARN] ALERT_KV not configured — deduplication disabled. Add a KV namespace binding named ALERT_KV in wrangler.toml and Cloudflare dashboard.");
+  if (env.ALERT_KV) {
+    try {
+      const val = await env.ALERT_KV.get(key);
+      if (val !== null) {
+        memoryCache.add(key);
+        return true;
+      }
+    } catch (e) {
+      console.error("[KV] Error reading key:", e.message);
+    }
+  }
   return false;
 }
 
 async function markAsAlerted(env, key) {
-  if (env.ALERT_KV) {
-    await env.ALERT_KV.put(key, "1", { expirationTtl: 604800 });
+  if (memoryCache) {
+    memoryCache.add(key);
+    if (memoryCache.size > 2000) {
+      const firstKey = memoryCache.values().next().value;
+      memoryCache.delete(firstKey);
+    }
   }
-  // memoryCache is useless across invocations but keep for local dev
-  memoryCache.add(key);
+  if (env.ALERT_KV) {
+    try {
+      await env.ALERT_KV.put(key, "1", { expirationTtl: 604800 });
+    } catch (e) {
+      console.error("[KV] Error writing key:", e.message);
+    }
+  }
 }
 
 async function fetchCandles(ticker, timeframe) {

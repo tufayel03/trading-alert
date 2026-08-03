@@ -200,6 +200,18 @@ def scan_symbol(symbol_info, config, state):
             closed_low   = df['Low'].iloc[-1]
             closed_close = df['Close'].iloc[-1]
 
+            # Freshness Check: Skip generating alerts if closed bar closed longer ago than max_lag
+            now_ts = time.time()
+            closed_ts = closed_idx.timestamp()
+            tf_seconds = {"5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400, "1d": 86400}.get(tf, 900)
+            max_lag = {"5m": 600, "15m": 1200, "30m": 2100, "1h": 3600, "4h": 7200, "1d": 14400}.get(tf, 1800)
+            bar_close_time = closed_ts + tf_seconds
+            lag_seconds = now_ts - bar_close_time
+
+            if lag_seconds > max_lag:
+                print(f" Skipping {name} ({tf}): closed bar closed {round(lag_seconds / 60)}m ago (stale)")
+                continue
+
             prev_close   = df['Close'].iloc[-2]
             bar2b_open   = df['Open'].iloc[-3]
             bar2b_close  = df['Close'].iloc[-3]
