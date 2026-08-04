@@ -50,3 +50,27 @@ And sends **Discord Alerts with live dark-mode candlestick chart embeds**!
    - Go to **Triggers** $\rightarrow$ **Cron Triggers** $\rightarrow$ Add Trigger: `* * * * *` (Every minute).
 
 **Done!**
+
+---
+
+## 💾 Persistent Settings Storage (Cloudflare KV)
+
+To ensure your scanner toggle settings (turning off BOS/MSS, changing timeframes) persist permanently across all server restarts and 24/7 background cron scans:
+
+### Using Wrangler CLI:
+1. Run:
+   ```bash
+   npx wrangler kv namespace create ALERT_KV
+   ```
+2. Open `wrangler.toml` and add the binding ID returned by Wrangler:
+   ```toml
+   [[kv_namespaces]]
+   binding = "ALERT_KV"
+   id = "YOUR_KV_NAMESPACE_ID"
+   ```
+3. Redeploy: `npx wrangler deploy`
+
+### Using Cloudflare Dashboard:
+1. Go to **Storage & Databases** $\rightarrow$ **KV** $\rightarrow$ **Create Namespace**. Name it `ALERT_KV`.
+2. Go to your Worker $\rightarrow$ **Settings** $\rightarrow$ **Variables & Bindings** $\rightarrow$ **KV Namespace Bindings** $\rightarrow$ **Add Binding**.
+3. Variable Name: `ALERT_KV`, KV Namespace: Select `ALERT_KV`. Click **Deploy**.

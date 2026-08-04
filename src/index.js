@@ -221,7 +221,7 @@ export default {
     // Serve GUI Admin Page
     if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/admin")) {
       const settings = await getConfig(env);
-      return new Response(renderAdminHTML(settings), {
+      return new Response(renderAdminHTML(settings, !!env.ALERT_KV), {
         headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache, no-store, must-revalidate" }
       });
     }
@@ -273,21 +273,35 @@ async function getConfig(env) {
   if (custom) {
     if (!custom.discordWebhookUrl) custom.discordWebhookUrl = fallbackWebhook;
     if (!custom.chartTheme) custom.chartTheme = "light";
-    // BUG FIX #1: When user saves settings from UI, all missing pattern keys must get defaults.
-    // Without this, patterns not saved by UI would be undefined and skip all alerts.
-    if (!custom.BOS)      custom.BOS      = { enabled: true, timeframes: ["5m", "15m", "30m", "1h", "4h", "1d"] };
-    if (!custom.MSS)      custom.MSS      = { enabled: true, timeframes: ["5m", "15m", "30m", "1h", "4h", "1d"] };
-    if (!custom.FVG)      custom.FVG      = { enabled: true, timeframes: ["5m", "15m", "30m", "1h"], minPointsForex: { "5m": 50, "15m": 100, "30m": 150, "1h": 200, "4h": 500, "1d": 1000 }, minPointsGold: { "5m": 100, "15m": 300, "30m": 400, "1h": 500, "4h": 1000, "1d": 2000 } };
-    if (!custom.FVGFill)  custom.FVGFill  = { enabled: true, timeframes: ["5m", "15m", "30m", "1h"] };
-    if (!custom.OB)       custom.OB       = { enabled: true, timeframes: ["5m", "15m", "30m", "1h", "4h"] };
-    if (!custom.Liquidity)custom.Liquidity= { enabled: true, timeframes: ["5m", "15m", "30m", "1h", "4h"] };
+
+    const ensurePattern = (key, defaultTfs, extra = {}) => {
+      if (!custom[key]) {
+        custom[key] = { enabled: true, timeframes: defaultTfs, ...extra };
+      } else {
+        if (typeof custom[key].enabled !== "boolean") custom[key].enabled = true;
+        if (!Array.isArray(custom[key].timeframes)) custom[key].timeframes = defaultTfs;
+        for (const k in extra) {
+          if (!custom[key][k]) custom[key][k] = extra[k];
+        }
+      }
+    };
+
+    ensurePattern("BOS", ["5m", "15m", "30m", "1h", "4h", "1d"]);
+    ensurePattern("MSS", ["5m", "15m", "30m", "1h", "4h", "1d"]);
+    ensurePattern("FVG", ["5m", "15m", "30m", "1h"], {
+      minPointsForex: { "5m": 50, "15m": 100, "30m": 150, "1h": 200, "4h": 500, "1d": 1000 },
+      minPointsGold: { "5m": 100, "15m": 300, "30m": 400, "1h": 500, "4h": 1000, "1d": 2000 }
+    });
+    ensurePattern("FVGFill", ["5m", "15m", "30m", "1h"]);
+    ensurePattern("OB", ["5m", "15m", "30m", "1h", "4h"]);
+    ensurePattern("Liquidity", ["5m", "15m", "30m", "1h", "4h"]);
     return custom;
   }
 
   return {
     discordWebhookUrl: fallbackWebhook,
     chartTheme: "light",
-    BOS: { enabled: true, timeframes: ["5m", "15m", "30m", "1h", "4h", "1d"] },  // BUG FIX #5: was missing 5m and 1d
+    BOS: { enabled: true, timeframes: ["5m", "15m", "30m", "1h", "4h", "1d"] },
     MSS: { enabled: env.ENABLE_MSS !== "false", timeframes: parseTf(env.MSS_TIMEFRAMES, ["15m", "30m", "1h", "4h"]) },
     FVG: {
       enabled: env.ENABLE_FVG !== "false",
@@ -619,9 +633,105 @@ async function markAsAlerted(env, key) {
 }
 
 async function fetchCandles(ticker, timeframe) {
-  // BUG FIX #7: fetchTradingViewCandles always returned null (dead network call removed)
-  // Go directly to Yahoo Finance which is the only working data source
+  // Primary Source: Deriv Real CFD Broker Feed (Exact match for MetaTrader / CFD Brokers / ForexFactory)
+  const derivCandles = await fetchDerivCandles(ticker, timeframe);
+  if (derivCandles && derivCandles.length > 5) {
+    return derivCandles;
+  }
+
+  // Secondary Fallback for Gold
+  if (ticker === "GC=F" || ticker === "XAUUSD" || ticker.includes("XAU")) {
+    const spotCandles = await fetchSpotGoldCandles(timeframe);
+    if (spotCandles && spotCandles.length > 5) {
+      return spotCandles;
+    }
+  }
+
+  // General Fallback: Yahoo Finance
   return await fetchYahooCandles(ticker, timeframe);
+}
+
+async function fetchDerivCandles(symbol, timeframe) {
+  return new Promise((resolve) => {
+    const symbolMap = {
+      "EURUSD": "frxEURUSD", "EURUSD=X": "frxEURUSD",
+      "GBPUSD": "frxGBPUSD", "GBPUSD=X": "frxGBPUSD",
+      "GC=F": "frxXAUUSD", "XAUUSD": "frxXAUUSD", "XAUUSD (Gold)": "frxXAUUSD"
+    };
+    const derivSymbol = symbolMap[symbol] || symbolMap[symbol?.name] || "frxEURUSD";
+    const tfMap = { "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400, "1d": 86400 };
+    const granularity = tfMap[timeframe] || 900;
+
+    let ws;
+    let timer = setTimeout(() => {
+      if (ws) { try { ws.close(); } catch(e){} }
+      resolve(null);
+    }, 4000);
+
+    try {
+      ws = new WebSocket("wss://ws.derivws.com/websockets/v3?app_id=1089");
+      ws.onopen = () => {
+        ws.send(JSON.stringify({
+          ticks_history: derivSymbol,
+          adjust_start_time: 1,
+          count: 100,
+          end: "latest",
+          granularity: granularity,
+          style: "candles"
+        }));
+      };
+      ws.onmessage = (evt) => {
+        clearTimeout(timer);
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.candles && Array.isArray(msg.candles)) {
+            const formatted = msg.candles.map(c => ({
+              timestamp: Number(c.epoch),
+              open: Number(c.open),
+              high: Number(c.high),
+              low: Number(c.low),
+              close: Number(c.close)
+            }));
+            ws.close();
+            return resolve(formatted);
+          }
+        } catch(e){}
+        ws.close();
+        resolve(null);
+      };
+      ws.onerror = () => {
+        clearTimeout(timer);
+        resolve(null);
+      };
+    } catch(e) {
+      clearTimeout(timer);
+      resolve(null);
+    }
+  });
+}
+
+async function fetchSpotGoldCandles(timeframe) {
+  try {
+    const tfMap = { "5m": "5m", "15m": "15m", "30m": "30m", "1h": "1h", "4h": "4h", "1d": "1d" };
+    const interval = tfMap[timeframe] || "15m";
+    const url = `https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=${interval}&limit=100`;
+
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const klines = await res.json();
+    if (!Array.isArray(klines)) return null;
+
+    return klines.map(k => ({
+      timestamp: Math.floor(k[0] / 1000),
+      open: parseFloat(k[1]),
+      high: parseFloat(k[2]),
+      low: parseFloat(k[3]),
+      close: parseFloat(k[4])
+    }));
+  } catch (e) {
+    console.error("[fetchSpotGoldCandles] Error:", e.message);
+    return null;
+  }
 }
 
 async function fetchTradingViewCandles(ticker, timeframe) {
@@ -810,7 +920,7 @@ async function sendDiscordEmbed(webhookUrl, eventTitle, symbol, timeframe, price
   }
 }
 
-function renderAdminHTML(settings) {
+function renderAdminHTML(settings, hasKV = false) {
   const patterns = [
     { key: "BOS", name: "BOS (Break of Structure)", desc: "Market structure trend continuation breaks" },
     { key: "MSS", name: "MSS (Market Structure Shift)", desc: "Major market trend reversal shifts" },
@@ -1088,9 +1198,9 @@ function renderAdminHTML(settings) {
       cursor: pointer;
       top: 0; left: 0; right: 0; bottom: 0;
       background-color: #1e293b;
-      border: 1px solid var(--card-border);
       transition: .25s;
       border-radius: 24px;
+      border: 1px solid var(--card-border);
     }
 
     .slider:before {
@@ -1332,10 +1442,64 @@ function renderAdminHTML(settings) {
   </div>
 
   <script>
-    const settings = ${JSON.stringify(settings)};
+    let settings = ${JSON.stringify(settings)};
     const defaultWebhook = "${DEFAULT_WEBHOOK}";
+    const hasKV = ${JSON.stringify(hasKV)};
 
     window.addEventListener('DOMContentLoaded', () => {
+      // Load settings from localStorage if user has previously saved settings
+      const savedSettingsRaw = localStorage.getItem('ict_scanner_settings');
+      let localSettings = null;
+      if (savedSettingsRaw) {
+        try { localSettings = JSON.parse(savedSettingsRaw); } catch(e){}
+      }
+
+      if (localSettings) {
+        settings = localSettings;
+
+        // Restore checkboxes & chips UI
+        ['BOS', 'MSS', 'FVG', 'FVGFill', 'OB', 'Liquidity'].forEach(pat => {
+          const toggleEl = document.getElementById(pat + '_enabled');
+          if (toggleEl && settings[pat]) {
+            toggleEl.checked = !!settings[pat].enabled;
+
+            const cardEl = toggleEl.closest('.card');
+            if (cardEl && Array.isArray(settings[pat].timeframes)) {
+              const chips = cardEl.querySelectorAll('.chip');
+              chips.forEach(chip => {
+                const tf = chip.innerText.trim();
+                if (settings[pat].timeframes.includes(tf)) {
+                  chip.classList.add('active');
+                } else {
+                  chip.classList.remove('active');
+                }
+              });
+            }
+          }
+        });
+
+        // Restore FVG min points
+        if (settings.FVG && settings.FVG.minPointsForex) {
+          ['5m', '15m', '30m', '1h', '4h', '1d'].forEach(tf => {
+            const el = document.getElementById('forex_fvg_min_' + tf);
+            if (el && settings.FVG.minPointsForex[tf] !== undefined) el.value = settings.FVG.minPointsForex[tf];
+          });
+        }
+        if (settings.FVG && settings.FVG.minPointsGold) {
+          ['5m', '15m', '30m', '1h', '4h', '1d'].forEach(tf => {
+            const el = document.getElementById('gold_fvg_min_' + tf);
+            if (el && settings.FVG.minPointsGold[tf] !== undefined) el.value = settings.FVG.minPointsGold[tf];
+          });
+        }
+
+        // Auto-sync settings to active worker isolate
+        fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(settings)
+        }).catch(e => console.error("Auto-sync failed:", e));
+      }
+
       const savedLocalWebhook = localStorage.getItem('ict_discord_webhook_url');
       const webhookInput = document.getElementById('discordWebhookUrl');
       if (savedLocalWebhook) {
@@ -1351,6 +1515,15 @@ function renderAdminHTML(settings) {
       if (savedTheme) {
         themeInput.value = savedTheme;
         settings.chartTheme = savedTheme;
+      }
+
+      if (!hasKV) {
+        const banner = document.getElementById('status-banner');
+        banner.style.padding = '12px';
+        banner.style.background = 'rgba(234, 179, 8, 0.1)';
+        banner.style.border = '1px solid rgba(234, 179, 8, 0.3)';
+        banner.style.color = '#eab308';
+        banner.innerHTML = '⚠️ <strong>Cloudflare KV namespace is not configured:</strong> Settings are saved locally in your browser. For persistent 24/7 background storage across worker restarts, bind KV in <code>wrangler.toml</code>.';
       }
     });
 
@@ -1408,7 +1581,7 @@ function renderAdminHTML(settings) {
         banner.style.color = '#ef4444';
         banner.innerText = '❌ Network Error: ' + err.message;
       }
-      setTimeout(() => { banner.innerText = ''; banner.style.padding = '0'; }, 5000);
+      setTimeout(() => { if(!hasKV){ banner.innerHTML = '⚠️ <strong>Cloudflare KV namespace is not configured:</strong> Settings are saved locally in your browser. For persistent 24/7 background storage across worker restarts, bind KV in <code>wrangler.toml</code>.'; } else { banner.innerText = ''; banner.style.padding = '0'; } }, 5000);
     }
 
     document.getElementById('configForm').onsubmit = async (e) => {
@@ -1440,6 +1613,9 @@ function renderAdminHTML(settings) {
         if (goldVal) settings.FVG.minPointsGold[tf] = Number(goldVal.value);
       });
 
+      // Persist full settings in localStorage
+      localStorage.setItem('ict_scanner_settings', JSON.stringify(settings));
+
       const res = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1459,7 +1635,7 @@ function renderAdminHTML(settings) {
         banner.style.color = '#ef4444';
         banner.innerText = '❌ Error saving settings!';
       }
-      setTimeout(() => { banner.innerText = ''; banner.style.padding = '0'; }, 3000);
+      setTimeout(() => { if(!hasKV){ banner.innerHTML = '⚠️ <strong>Cloudflare KV namespace is not configured:</strong> Settings are saved locally in your browser. For persistent 24/7 background storage across worker restarts, bind KV in <code>wrangler.toml</code>.'; } else { banner.innerText = ''; banner.style.padding = '0'; } }, 3000);
     };
   </script>
 </body>

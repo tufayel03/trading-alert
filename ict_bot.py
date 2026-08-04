@@ -75,8 +75,41 @@ def save_state(state):
     except Exception as e:
         print(f"Error saving state: {e}")
 
+def fetch_spot_gold_candles(timeframe):
+    tf_map = { "5m": "5m", "15m": "15m", "30m": "30m", "1h": "1h", "4h": "4h", "1d": "1d" }
+    interval = tf_map.get(timeframe, "15m")
+    url = f"https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval={interval}&limit=100"
+    try:
+        res = requests.get(url, timeout=10)
+        if res.status_code == 200:
+            klines = res.json()
+            data = []
+            for k in klines:
+                data.append({
+                    "Date": pd.to_datetime(k[0], unit='ms'),
+                    "Open": float(k[1]),
+                    "High": float(k[2]),
+                    "Low": float(k[3]),
+                    "Close": float(k[4]),
+                    "Volume": float(k[5])
+                })
+            df = pd.DataFrame(data)
+            df.set_index("Date", inplace=False)
+            df.index = pd.to_datetime(df['Date'])
+            df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
+            return df
+    except Exception as e:
+        print(f"Error fetching spot gold candles: {e}")
+    return None
+
 def fetch_candle_data(ticker, timeframe):
     """Fetches candlestick OHLC data for the given timeframe, returning only CLOSED bars."""
+    if ticker in ["GC=F", "XAUUSD", "GC=F=X"]:
+        spot_df = fetch_spot_gold_candles(timeframe)
+        if spot_df is not None and not spot_df.empty:
+            if len(spot_df) > 1:
+                return spot_df.iloc[:-1]
+
     tf_map = {
         "5m":  ("5m",  "5d"),
         "15m": ("15m", "7d"),
@@ -97,8 +130,6 @@ def fetch_candle_data(ticker, timeframe):
 
     df = df[['Open', 'High', 'Low', 'Close', 'Volume']].dropna()
 
-    # BUG FIX #3: Resample 1h → 4h BEFORE stripping the live candle,
-    # but only include complete 4-bar buckets (partial live bucket is excluded by integer division)
     if timeframe == "4h":
         df = df.resample('4h').agg({
             'Open':   'first',
@@ -108,8 +139,6 @@ def fetch_candle_data(ticker, timeframe):
             'Volume': 'sum'
         }).dropna()
 
-    # BUG FIX #3: Strip the last bar which is always the live/open (incomplete) candle.
-    # All pattern evaluation should use iloc[-1] now (which was the previous iloc[-2]).
     if len(df) > 1:
         df = df.iloc[:-1]
 
